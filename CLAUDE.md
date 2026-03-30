@@ -2,6 +2,18 @@
 
 Reddit scraper agent that collects posts/comments from UFO subreddits, evaluates authenticity with Claude, and displays findings in a terminal-style web UI.
 
+## Run Modes
+
+Set `NERD_MODE` env var:
+- `all` (default) — runs scraper + crons + web UI
+- `scraper` — scraper + crons only, no web server (for Mac Pro)
+- `web` — web UI only, read-only from DB (for Cloud Run)
+
+## Database
+
+Uses Firestore Enterprise with MongoDB compatibility (GCP project: `iconic-elevator-394020`, database: `nerd`).
+Connection string format: `mongodb://USER:PASS@UID.europe-west1.firestore.goog:443/nerd?loadBalanced=true&authMechanism=SCRAM-SHA-256&tls=true&retryWrites=false`
+
 ## Architecture
 
 ```
