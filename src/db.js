@@ -7,19 +7,33 @@ let client;
 let db;
 
 export async function connect() {
-  client = new MongoClient(config.mongoUri);
+  console.log("[db] connecting...");
+  client = new MongoClient(config.mongoUri, {
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+  });
   await client.connect();
   db = client.db();
+  console.log("[db] connected, creating indexes...");
 
-  // Indexes
-  await db.collection("posts").createIndex({ redditId: 1 }, { unique: true });
-  await db.collection("posts").createIndex({ subreddit: 1, createdUtc: -1 });
-  await db.collection("posts").createIndex({ evaluated: 1 });
+  // Indexes — wrapped in try/catch for Firestore compatibility
+  const indexes = [
+    ["posts", { redditId: 1 }, { unique: true }],
+    ["posts", { subreddit: 1, createdUtc: -1 }],
+    ["posts", { evaluated: 1 }],
+    ["comments", { redditId: 1 }, { unique: true }],
+    ["comments", { postRedditId: 1 }],
+  ];
 
-  await db.collection("comments").createIndex({ redditId: 1 }, { unique: true });
-  await db.collection("comments").createIndex({ postRedditId: 1 });
+  for (const [col, keys, opts] of indexes) {
+    try {
+      await db.collection(col).createIndex(keys, opts || {});
+    } catch (e) {
+      console.warn(`[db] index ${col} ${JSON.stringify(keys)} skipped:`, e.message);
+    }
+  }
 
-  console.log("[db] connected to", config.mongoUri);
+  console.log("[db] ready");
   return db;
 }
 
