@@ -24,7 +24,17 @@
       "Bash(git push:*)",
       "Bash(node -e \":*)",
       "Read(//Users/turinglabs/.ssh/**)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(dig +short nerd.directory)",
+      "Bash(host nerd.directory)",
+      "Bash(tailscale status:*)",
+      "Bash(gcloud services:*)",
+      "Bash(gcloud alpha:*)",
+      "Bash(gcloud iam:*)",
+      "Bash(gcloud projects:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.cloud.google.com)",
+      "Bash(gcloud firestore:*)"
     ]
   }
 }

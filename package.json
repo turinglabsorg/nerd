@@ -6,6 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:web": "NERD_MODE=web node src/index.js",
+    "start:scraper": "NERD_MODE=scraper node src/index.js",
     "dev": "node --watch src/index.js",
     "cli": "node src/cli.js"
   },

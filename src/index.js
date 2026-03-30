@@ -8,16 +8,36 @@ import { geocodePosts } from "./geocode.js";
 import { analyzeMedia } from "./analyze-media.js";
 import { startServer } from "./server.js";
 
+const MODE = process.env.NERD_MODE || "all"; // "all", "scraper", "web"
+
 async function main() {
   await connect();
 
+  // Graceful shutdown
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, async () => {
+      console.log(`\n[nerd] ${sig} received, shutting down...`);
+      await disconnect();
+      process.exit(0);
+    });
+  }
+
+  if (MODE === "web") {
+    // Web-only mode (for Cloud Run)
+    startServer(parseInt(process.env.PORT || "3666", 10));
+    console.log("[nerd] running in WEB mode");
+    return;
+  }
+
+  // Scraper mode or all
   console.log("[nerd] watching subreddits:", config.subreddits.join(", "));
   if (config.keywords.length > 0) {
     console.log("[nerd] keyword filter:", config.keywords.join(", "));
   }
 
-  // Start web UI
-  startServer();
+  if (MODE === "all") {
+    startServer();
+  }
 
   // Run once on startup
   await scrapePosts();
@@ -52,17 +72,8 @@ async function main() {
     await analyzeMedia();
   });
 
-  console.log("[nerd] crons scheduled — posts: %s, comments: %s, evaluate: %s",
-    config.cronPosts, config.cronComments, config.cronEvaluate);
-
-  // Graceful shutdown
-  for (const sig of ["SIGINT", "SIGTERM"]) {
-    process.on(sig, async () => {
-      console.log(`\n[nerd] ${sig} received, shutting down...`);
-      await disconnect();
-      process.exit(0);
-    });
-  }
+  console.log("[nerd] mode: %s — crons: posts %s, comments %s, evaluate %s",
+    MODE, config.cronPosts, config.cronComments, config.cronEvaluate);
 }
 
 main().catch((err) => {
