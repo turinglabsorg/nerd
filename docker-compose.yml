@@ -1,0 +1,13 @@
+services:
+  nerd:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MONGODB_URI=mongodb://host.docker.internal:27017/nerd
+    ports:
+      - "3666:3666"
+    volumes:
+      - ~/.claude:/root/.claude
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

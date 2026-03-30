@@ -1,0 +1,19 @@
+{
+  "name": "nerd",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Reddit scraper agent — collects posts/comments, evaluates authenticity with Claude",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "cli": "node src/cli.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "mongodb": "^6.12.0",
+    "node-cron": "^3.0.3"
+  },
+  "license": "MIT"
+}

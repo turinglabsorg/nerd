@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NERD // Neural Evaluation of Reddit Data</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta property="og:title" content="NERD // Neural Evaluation of Reddit Data">
+<meta property="og:description" content="Scraping UFO subreddits, evaluating authenticity with AI">
+<meta property="og:image" content="/og.svg">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+  :root {
+    --green: #00ff41;
+    --green-dim: #00aa2a;
+    --green-dark: #003d10;
+    --amber: #ffb000;
+    --red: #ff3333;
+    --cyan: #00ffff;
+    --bg: #0a0a0a;
+    --bg-panel: #0d0d0d;
+    --border: #1a3a1a;
+    --text: #00dd38;
+    --text-dim: #007a20;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* CRT scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+  }
+
+  /* CRT flicker */
+  @keyframes flicker {
+    0% { opacity: 0.97; }
+    50% { opacity: 1; }
+    100% { opacity: 0.98; }
+  }
+  body { animation: flicker 0.15s infinite; }
+
+  /* Glow effect */
+  @keyframes glow {
+    0%, 100% { text-shadow: 0 0 4px rgba(0,255,65,0.4); }
+    50% { text-shadow: 0 0 8px rgba(0,255,65,0.6), 0 0 16px rgba(0,255,65,0.2); }
+  }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(180deg, #0f1a0f 0%, var(--bg) 100%);
+  }
+
+  .header h1 {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--green);
+    animation: glow 2s ease-in-out infinite;
+    letter-spacing: 2px;
+  }
+
+  .header h1 span { color: var(--text-dim); font-weight: 300; }
+
+  .header-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .header-stats .val { color: var(--green); font-weight: 700; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 340px 1fr;
+    gap: 1px;
+    height: calc(100vh - 50px);
+    background: var(--border);
+  }
+
+  .panel {
+    background: var(--bg-panel);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-title {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--amber);
+    background: rgba(255,176,0,0.03);
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .panel-title .count { color: var(--text-dim); font-weight: 400; }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-track { background: var(--bg); }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--green-dark); }
+
+  /* === MAP === */
+  #map-panel { grid-column: 1 / 3; }
+
+  #leaflet-map {
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+  }
+
+  /* Only filter the tile layer, not markers */
+  #leaflet-map .leaflet-tile-pane {
+    filter: saturate(0.4) hue-rotate(80deg) brightness(1.2) contrast(1.1);
+  }
+
+  /* Override Leaflet controls to match terminal theme */
+  .leaflet-control-zoom a {
+    background: var(--bg) !important;
+    color: var(--green) !important;
+    border-color: var(--border) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--green-dark) !important;
+  }
+  .leaflet-control-attribution {
+    background: rgba(10,10,10,0.8) !important;
+    color: var(--text-dim) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 8px !important;
+  }
+  .leaflet-control-attribution a { color: var(--green-dark) !important; }
+
+  /* Custom popup */
+  .leaflet-popup-content-wrapper {
+    background: rgba(10,10,10,0.95) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    color: var(--green) !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 11px !important;
+  }
+  .leaflet-popup-tip { background: rgba(10,10,10,0.95) !important; }
+  .leaflet-popup-close-button { color: var(--green) !important; }
+
+  .map-legend {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    font-size: 10px;
+    display: flex;
+    gap: 14px;
+    z-index: 1000;
+    background: rgba(0,0,0,0.85);
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+
+  .map-legend span::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .map-legend .lg-real::before { background: var(--green); }
+  .map-legend .lg-suspicious::before { background: var(--amber); }
+  .map-legend .lg-fake::before { background: var(--red); }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(0.5); opacity: 0.8; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+
+  /* === FINDINGS LIST === */
+  .finding {
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+
+  .finding:hover {
+    border-color: var(--green-dim);
+    background: rgba(0,255,65,0.02);
+  }
+
+  .finding-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .verdict-badge {
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid;
+  }
+
+  .verdict-real { color: var(--green); border-color: var(--green-dark); background: rgba(0,255,65,0.05); }
+  .verdict-suspicious { color: var(--amber); border-color: #3d2c00; background: rgba(255,176,0,0.05); }
+  .verdict-likely_fake { color: var(--red); border-color: #3d0000; background: rgba(255,51,51,0.05); }
+  .verdict-error { color: #666; border-color: #333; }
+
+  .finding-title {
+    font-size: 11px;
+    color: var(--green);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 90%;
+  }
+
+  .finding-meta {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .finding-meta a {
+    color: var(--cyan);
+    text-decoration: none;
+  }
+
+  .confidence-bar {
+    width: 50px;
+    height: 3px;
+    background: var(--bg);
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .confidence-bar-inner {
+    height: 100%;
+    transition: width 0.3s;
+  }
+
+  /* === DETAIL PANEL === */
+  .detail-empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+
+  .detail-empty pre {
+    color: var(--green-dark);
+    font-size: 9px;
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+
+  .detail-section {
+    margin-bottom: 12px;
+  }
+
+  .detail-section h3 {
+    font-size: 10px;
+    color: var(--amber);
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+
+  .detail-section p, .detail-section pre {
+    font-size: 11px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .detail-comment {
+    border-left: 2px solid var(--border);
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    font-size: 10px;
+  }
+
+  .detail-comment .author { color: var(--cyan); }
+  .detail-comment .score { color: var(--text-dim); }
+
+  /* === MEDIA === */
+  .media-preview {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .media-preview img, .media-preview video {
+    max-width: 100%;
+    max-height: 250px;
+    display: block;
+    filter: saturate(0.7) contrast(1.1);
+    transition: filter 0.3s;
+  }
+
+  .media-preview:hover img, .media-preview:hover video {
+    filter: saturate(1) contrast(1);
+  }
+
+  .media-preview .scanline-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0, 255, 65, 0.03) 2px, rgba(0, 255, 65, 0.03) 4px
+    );
+    mix-blend-mode: overlay;
+  }
+
+  .media-badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 2px 6px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid var(--border);
+  }
+
+  .media-analysis-box {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    margin: 8px 0;
+    background: rgba(0,255,65,0.02);
+  }
+
+  .media-analysis-box h4 {
+    font-size: 10px;
+    color: var(--cyan);
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+
+  .finding-media-icon {
+    font-size: 10px;
+    color: var(--cyan);
+    margin-left: 4px;
+  }
+
+  /* === FILTERS === */
+  .filters {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+  }
+
+  .filter-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 2px 8px;
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover { border-color: var(--green-dim); color: var(--green); }
+  .filter-btn.active { border-color: var(--green); color: var(--green); background: rgba(0,255,65,0.05); }
+
+  /* === LIGHTBOX === */
+  #lightbox {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9998;
+    background: rgba(0,0,0,0.95);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    cursor: pointer;
+  }
+
+  #lightbox.open { display: flex; }
+
+  #lightbox-close {
+    position: absolute;
+    top: 12px;
+    right: 20px;
+    color: var(--green);
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.8);
+    padding: 4px 10px;
+    z-index: 10;
+  }
+
+  #lightbox-close:hover { border-color: var(--green); }
+
+  #lightbox-content {
+    max-width: 95vw;
+    max-height: 90vh;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #lightbox-content img {
+    max-width: 95vw;
+    max-height: 90vh;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+  }
+
+  #lightbox-content iframe {
+    width: 80vw;
+    height: 80vh;
+    border: 1px solid var(--border);
+  }
+
+  #lightbox-content .scanline-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0, 255, 65, 0.02) 2px, rgba(0, 255, 65, 0.02) 4px
+    );
+  }
+
+  /* === BOOT ANIMATION === */
+  #boot-screen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  #boot-screen pre {
+    font-size: 11px;
+    color: var(--green);
+    line-height: 1.6;
+  }
+
+  #boot-screen.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div id="boot-screen">
+  <pre id="boot-log"></pre>
+</div>
+
+<div id="app" style="display:none">
+  <div class="header">
+    <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 10 48 30" style="width:28px;height:16px;vertical-align:middle;margin-right:6px"><ellipse cx="32" cy="30" rx="20" ry="6" fill="none" stroke="#00ff41" stroke-width="1.5"/><path d="M20 30 Q26 18 32 16 Q38 18 44 30" fill="none" stroke="#00ff41" stroke-width="1.5"/><circle cx="24" cy="30" r="1.5" fill="#00ff41"/><circle cx="32" cy="30" r="1.5" fill="#ffb000"/><circle cx="40" cy="30" r="1.5" fill="#00ff41"/></svg>NERD <span>// Neural Evaluation of Reddit Data v1.0</span></h1>
+    <div class="header-stats">
+      <div>POSTS <span class="val" id="stat-posts">-</span></div>
+      <div>EVALUATED <span class="val" id="stat-eval">-</span></div>
+      <div>COMMENTS <span class="val" id="stat-comments">-</span></div>
+      <div>PENDING <span class="val" id="stat-pending">-</span></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="panel" id="map-panel">
+      <div class="panel-title">
+        GLOBAL SIGHTING MAP
+        <span class="count" id="map-count">0 geolocated</span>
+      </div>
+      <div style="position:relative;height:100%">
+        <div id="leaflet-map"></div>
+        <div class="map-legend">
+          <span class="lg-real">REAL</span>
+          <span class="lg-suspicious">SUSPICIOUS</span>
+          <span class="lg-fake">LIKELY FAKE</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="list-panel">
+      <div class="panel-title">
+        FINDINGS
+        <span class="count" id="list-count">0 entries</span>
+      </div>
+      <div class="filters">
+        <button class="filter-btn active" data-filter="all">ALL</button>
+        <button class="filter-btn" data-filter="real">REAL</button>
+        <button class="filter-btn" data-filter="suspicious">SUS</button>
+        <button class="filter-btn" data-filter="likely_fake">FAKE</button>
+        <span style="flex:1"></span>
+        <button class="filter-btn active" id="btn-auto" onclick="toggleAuto()">AUTO</button>
+        <select id="auto-interval" onchange="setAutoInterval()" style="
+          background:var(--bg);color:var(--text-dim);border:1px solid var(--border);
+          font-family:inherit;font-size:10px;padding:2px 4px;cursor:pointer;">
+          <option value="10000">10s</option>
+          <option value="30000" selected>30s</option>
+          <option value="60000">1m</option>
+          <option value="300000">5m</option>
+        </select>
+      </div>
+      <div class="panel-body" id="findings-list"></div>
+    </div>
+
+    <div class="panel" id="detail-panel">
+      <div class="panel-title">
+        POST ANALYSIS
+        <span class="count" id="detail-id">select a finding</span>
+      </div>
+      <div class="panel-body" id="detail-body">
+        <div class="detail-empty">
+          <pre>
+    .     *  .   .    *    .
+  .    *    UFO    .    *
+      .  ___===___  .    .
+   .    //  |||  \\    *
+  *    //   |||   \\  .
+ ____//_____|||____\\____
+/________________________\
+\________________________/
+   .    *  .    .   *
+          </pre>
+          &lt; SELECT A FINDING TO ANALYZE &gt;
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox">
+  <div id="lightbox-close">[ESC] CLOSE</div>
+  <div id="lightbox-content"></div>
+</div>
+
+<script>
+let leafletMap = null;
+let markerLayer = null;
+
+let allPosts = [];
+let geoData = [];
+let currentFilter = "all";
+let autoRefresh = true;
+let autoInterval = 30000;
+let autoTimer = null;
+
+// Boot sequence
+async function boot() {
+  const log = document.getElementById("boot-log");
+  const lines = [
+    "NERD v1.0 // Neural Evaluation of Reddit Data",
+    "==============================================",
+    "",
+    "> Initializing system...",
+    "> Loading kernel modules........... [OK]",
+    "> Connecting to MongoDB............ [OK]",
+    "> Scanning Reddit frequencies...... [OK]",
+    "> Calibrating Claude evaluator..... [OK]",
+    "> Rendering ASCII map engine....... [OK]",
+    "> Geolocation subsystem............ [OK]",
+    "",
+    "> SYSTEM ONLINE. Entering surveillance mode.",
+    "",
+  ];
+
+  for (const line of lines) {
+    log.textContent += line + "\n";
+    await new Promise(r => setTimeout(r, 80));
+  }
+
+  await new Promise(r => setTimeout(r, 400));
+  document.getElementById("boot-screen").classList.add("hidden");
+  document.getElementById("app").style.display = "";
+  init();
+}
+
+async function init() {
+  renderMap();
+  await Promise.all([loadStats(), loadPosts(), loadGeo()]);
+  setupFilters();
+
+  // Start auto-refresh
+  startAutoRefresh();
+}
+
+function renderMap() {
+  leafletMap = L.map('leaflet-map', {
+    center: [25, 0],
+    zoom: 2,
+    zoomControl: true,
+    attributionControl: true,
+  });
+
+  // CartoDB Dark Matter — terminal-style dark tiles
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: 'NERD // CartoDB',
+    subdomains: 'abcd',
+    maxZoom: 18,
+  }).addTo(leafletMap);
+
+  markerLayer = L.layerGroup().addTo(leafletMap);
+}
+
+function makeMarkerIcon(verdict) {
+  const colors = {
+    real: '#00ff41',
+    suspicious: '#ffb000',
+    likely_fake: '#ff3333',
+  };
+  const color = colors[verdict] || '#00ff41';
+
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:12px;height:12px;border-radius:50%;
+      background:${color};
+      box-shadow:0 0 8px ${color}, 0 0 16px ${color}44;
+      border:1px solid ${color}88;
+    "></div>
+    <div style="
+      position:absolute;top:-2px;left:-2px;
+      width:16px;height:16px;border-radius:50%;
+      border:1px solid ${color}66;
+      animation:pulse-ring 2s ease-out infinite;
+    "></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+    popupAnchor: [0, -10],
+  });
+}
+
+function renderMarkers() {
+  if (!markerLayer) return;
+  markerLayer.clearLayers();
+
+  let count = 0;
+  for (const post of geoData) {
+    if (!post.geo?.lat) continue;
+
+    const verdict = post.evaluation?.verdict || 'unknown';
+    const icon = makeMarkerIcon(verdict);
+
+    const marker = L.marker([post.geo.lat, post.geo.lng], { icon })
+      .bindPopup(`
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;max-width:250px">
+          <div style="color:${verdict === 'real' ? '#00ff41' : verdict === 'suspicious' ? '#ffb000' : '#ff3333'};font-weight:700;margin-bottom:4px">
+            ${verdict.toUpperCase()}
+          </div>
+          <div style="color:#00dd38;margin-bottom:4px">${escapeHtml(post.title.slice(0, 80))}</div>
+          <div style="color:#007a20;font-size:10px">
+            ${post.geo.query} &middot; r/${post.subreddit}
+          </div>
+        </div>
+      `, { className: '' })
+      .on('click', () => showDetail(post.redditId));
+
+    markerLayer.addLayer(marker);
+    count++;
+  }
+
+  document.getElementById("map-count").textContent = `${count} geolocated`;
+}
+
+async function loadStats() {
+  const res = await fetch("/api/stats");
+  const stats = await res.json();
+  document.getElementById("stat-posts").textContent = stats.totalPosts;
+  document.getElementById("stat-eval").textContent = stats.totalEvaluated;
+  document.getElementById("stat-comments").textContent = stats.totalComments;
+  document.getElementById("stat-pending").textContent = stats.pendingEval;
+}
+
+async function loadPosts() {
+  try {
+    const res = await fetch("/api/posts?evaluated=true&limit=500");
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      allPosts = data;
+      renderFindings();
+    }
+  } catch(e) { console.error("loadPosts error:", e); }
+}
+
+async function loadGeo() {
+  try {
+    const res = await fetch("/api/geo");
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      geoData = data;
+      renderMarkers();
+    }
+  } catch(e) { console.error("loadGeo error:", e); }
+}
+
+function renderFindings() {
+  const list = document.getElementById("findings-list");
+  const filtered = currentFilter === "all"
+    ? allPosts
+    : allPosts.filter(p => p.evaluation?.verdict === currentFilter);
+
+  document.getElementById("list-count").textContent = filtered.length + " entries";
+
+  // Clear and rebuild
+  list.innerHTML = "";
+
+  filtered.forEach(function(post) {
+    var e = post.evaluation || {};
+    var verdict = e.verdict || "unknown";
+    var conf = e.confidence || 0;
+    var barColor = verdict === "real" ? "#00ff41"
+      : verdict === "suspicious" ? "#ffb000" : "#ff3333";
+
+    var div = document.createElement("div");
+    div.className = "finding";
+    div.setAttribute("data-id", post.redditId);
+
+    var meta = "r/" + post.subreddit + " \u00b7 u/" + post.author + " \u00b7 " + post.score + "pts";
+    if (post.geo && post.geo.query) meta += " \u00b7 " + post.geo.query;
+    if (post.mediaAnalysis) meta += " [" + (post.mediaAnalysis.authenticity || "MEDIA") + "]";
+    if (isMedia(post.url)) meta += " [IMG/VID]";
+
+    div.innerHTML =
+      '<div class="finding-header">' +
+        '<span class="verdict-badge verdict-' + verdict + '">' + verdict.toUpperCase() + '</span>' +
+        '<span>' + (conf * 100).toFixed(0) + '%' +
+          '<span class="confidence-bar">' +
+            '<span class="confidence-bar-inner" style="width:' + (conf * 100) + '%;background:' + barColor + '"></span>' +
+          '</span>' +
+        '</span>' +
+      '</div>' +
+      '<div class="finding-title">' + escapeHtml(post.title) + '</div>' +
+      '<div class="finding-meta">' + escapeHtml(meta) + '</div>';
+
+    div.addEventListener("click", function(ev) {
+      if (ev.target.tagName === "A") return;
+      showDetail(post.redditId);
+    });
+
+    list.appendChild(div);
+  });
+}
+
+async function showDetail(redditId) {
+  const body = document.getElementById("detail-body");
+  body.innerHTML = `<div class="detail-empty" style="color:var(--green)">Loading ${redditId}...</div>`;
+  document.getElementById("detail-id").textContent = redditId;
+
+  const res = await fetch(`/api/posts/${redditId}`);
+  const post = await res.json();
+  const e = post.evaluation || {};
+
+  const verdictClass = `verdict-${e.verdict || 'error'}`;
+
+  body.innerHTML = `
+    <div class="detail-section" style="margin-bottom:6px">
+      <p style="color:var(--green);font-weight:700;margin-bottom:2px">${escapeHtml(post.title)}</p>
+      <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | u/${post.author} | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
+    </div>
+
+    <div class="detail-section" style="margin-bottom:8px">
+      <p style="margin:0"><span class="verdict-badge ${verdictClass}">${(e.verdict || 'N/A').toUpperCase()}</span> Confidence: ${((e.confidence || 0) * 100).toFixed(0)}%</p>
+    </div>
+
+    <div class="detail-section">
+      <h3>> ANALYSIS</h3>
+      <pre>${escapeHtml(e.reasoning || 'No analysis available')}</pre>
+    </div>
+
+    ${renderMediaSection(post)}
+
+    ${post.selftext ? `<div class="detail-section">
+      <h3>> BODY</h3>
+      <p>${escapeHtml(post.selftext)}</p>
+    </div>` : ''}
+
+    <div class="detail-section">
+      <h3>> COMMENTS (${(post.comments || []).length})</h3>
+      ${(post.comments || []).map(c => `
+        <div class="detail-comment">
+          <span class="author">u/${escapeHtml(c.author)}</span>
+          <span class="score">(${c.score}pts)</span><br>
+          ${escapeHtml(c.body?.slice(0, 300) || '')}${(c.body?.length || 0) > 300 ? '...' : ''}
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function setupFilters() {
+  document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      renderFindings();
+    });
+  });
+}
+
+let refreshing = false;
+async function refreshAll() {
+  if (refreshing) return;
+  refreshing = true;
+  const btn = document.getElementById("btn-refresh");
+  btn.textContent = "...";
+  btn.style.color = "var(--green)";
+  try {
+    await Promise.all([loadStats(), loadPosts(), loadGeo()]);
+  } catch(e) {
+    console.error("refresh error:", e);
+  }
+  btn.textContent = "REFRESH";
+  btn.style.color = "";
+  refreshing = false;
+}
+
+function toggleAuto() {
+  autoRefresh = !autoRefresh;
+  const btn = document.getElementById("btn-auto");
+  btn.classList.toggle("active", autoRefresh);
+  btn.textContent = autoRefresh ? "AUTO" : "PAUSED";
+  if (autoRefresh) startAutoRefresh();
+  else if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+
+function setAutoInterval() {
+  autoInterval = parseInt(document.getElementById("auto-interval").value, 10);
+  if (autoRefresh) startAutoRefresh();
+}
+
+function startAutoRefresh() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(async () => {
+    if (autoRefresh) await refreshAll();
+  }, autoInterval);
+}
+
+function isMedia(url) {
+  if (!url) return false;
+  return /v\.redd\.it|i\.redd\.it|imgur\.com|\.(jpg|jpeg|png|gif|webp|mp4|webm)/i.test(url);
+}
+
+function renderMediaSection(post) {
+  let html = '';
+
+  // Show image/video preview
+  if (post.url && isMedia(post.url)) {
+    const isVideo = /v\.redd\.it|\.mp4|\.webm/i.test(post.url);
+
+    if (isVideo) {
+      const embedUrl = post.permalink ? post.permalink.replace('www.reddit.com', 'www.redditmedia.com') + '?ref_source=embed&embed=true' : '';
+      html += `
+        <div class="detail-section">
+          <h3>> MEDIA</h3>
+          <div class="media-preview" style="height:300px;cursor:pointer" onclick="openLightbox('video','${escapeHtml(embedUrl)}')">
+            <iframe src="${escapeHtml(embedUrl)}"
+              style="width:100%;height:100%;border:none;filter:brightness(0.9);pointer-events:none"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              loading="lazy"></iframe>
+            <div class="scanline-overlay"></div>
+            <span class="media-badge" style="color:var(--amber)">VIDEO — click to expand</span>
+          </div>
+        </div>`;
+    } else {
+      html += `
+        <div class="detail-section">
+          <h3>> MEDIA</h3>
+          <div class="media-preview" style="cursor:pointer" onclick="openLightbox('image','${escapeHtml(post.url)}')">
+            <img src="${escapeHtml(post.url)}" alt="post media"
+              onerror="this.parentElement.innerHTML='<p style=color:var(--text-dim)>[Image unavailable]</p>'">
+            <div class="scanline-overlay"></div>
+            <span class="media-badge" style="color:var(--cyan)">IMAGE — click to expand</span>
+          </div>
+        </div>`;
+    }
+  }
+
+  // Show media analysis if available
+  const ma = post.mediaAnalysis;
+  if (ma && ma.description) {
+    const authColor = ma.authenticity === 'genuine' ? 'var(--green)'
+      : ma.authenticity === 'cgi' || ma.authenticity === 'edited' ? 'var(--red)' : 'var(--amber)';
+
+    html += `
+      <div class="detail-section">
+        <h3>> MEDIA ANALYSIS</h3>
+        <div class="media-analysis-box">
+          <h4>AUTHENTICITY: <span style="color:${authColor}">${(ma.authenticity || 'N/A').toUpperCase()}</span>
+            (${((ma.confidence || 0) * 100).toFixed(0)}%)</h4>
+          <p style="margin:4px 0"><b style="color:var(--cyan)">ID:</b> ${escapeHtml(ma.identification || 'unknown')}</p>
+          <p style="margin:4px 0">${escapeHtml(ma.description)}</p>
+          <p style="margin:4px 0;color:var(--text-dim)"><i>${escapeHtml(ma.reasoning || '')}</i></p>
+          ${ma.frame_notes?.length ? `
+            <h4 style="margin-top:6px">FRAME NOTES:</h4>
+            ${ma.frame_notes.map((n, i) => `<p style="color:var(--text-dim)">[F${i+1}] ${escapeHtml(n)}</p>`).join('')}
+          ` : ''}
+        </div>
+      </div>`;
+  }
+
+  return html;
+}
+
+function openLightbox(type, src) {
+  var lb = document.getElementById("lightbox");
+  var content = document.getElementById("lightbox-content");
+
+  if (type === "image") {
+    content.innerHTML = '<img src="' + src + '"><div class="scanline-overlay"></div>';
+  } else {
+    content.innerHTML = '<iframe src="' + src + '" allowfullscreen></iframe><div class="scanline-overlay"></div>';
+  }
+
+  lb.classList.add("open");
+}
+
+function closeLightbox() {
+  var lb = document.getElementById("lightbox");
+  lb.classList.remove("open");
+  document.getElementById("lightbox-content").innerHTML = "";
+}
+
+// Close on clicking backdrop or close button
+document.addEventListener("DOMContentLoaded", function() {
+  document.getElementById("lightbox").addEventListener("click", function(e) {
+    if (e.target === this || e.target.id === "lightbox-close") closeLightbox();
+  });
+});
+
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") closeLightbox();
+});
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// GO
+boot();
+</script>
+</body>
+</html>

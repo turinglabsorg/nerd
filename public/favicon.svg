@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="8" fill="#0a0a0a"/>
+  <!-- UFO body -->
+  <ellipse cx="32" cy="30" rx="20" ry="6" fill="none" stroke="#00ff41" stroke-width="1.5"/>
+  <path d="M20 30 Q26 18 32 16 Q38 18 44 30" fill="none" stroke="#00ff41" stroke-width="1.5"/>
+  <!-- Beam -->
+  <path d="M26 36 L22 52 L42 52 L38 36" fill="#00ff4110" stroke="#00ff4144" stroke-width="0.5"/>
+  <!-- Lights -->
+  <circle cx="24" cy="30" r="1.5" fill="#00ff41">
+    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="32" cy="30" r="1.5" fill="#ffb000">
+    <animate attributeName="opacity" values="0.3;1;0.3" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="40" cy="30" r="1.5" fill="#00ff41">
+    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <!-- NERD text -->
+  <text x="32" y="60" text-anchor="middle" font-family="monospace" font-size="9" font-weight="700" fill="#00ff41">NERD</text>
+</svg>
