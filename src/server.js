@@ -63,6 +63,27 @@ export function startServer(port = 3666) {
     res.json(docs);
   });
 
+  // API: search posts
+  app.get("/api/search", async (req, res) => {
+    const q = req.query.q;
+    if (!q) return res.json([]);
+
+    const docs = await posts()
+      .find({
+        $or: [
+          { title: { $regex: q, $options: "i" } },
+          { selftext: { $regex: q, $options: "i" } },
+          { author: { $regex: q, $options: "i" } },
+          { "evaluation.reasoning": { $regex: q, $options: "i" } },
+        ],
+      })
+      .sort({ evaluatedAt: -1, insertedAt: -1 })
+      .limit(100)
+      .toArray();
+
+    res.json(docs);
+  });
+
   // API: single post with comments
   app.get("/api/posts/:redditId", async (req, res) => {
     const post = await posts().findOne({ redditId: req.params.redditId });

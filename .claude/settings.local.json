@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(yarn install:*)",
+      "Bash(yarn dev:*)",
+      "Bash(node:*)",
+      "Bash(claude -p \"Say hello\" --output-format json)",
+      "Bash(pkill -f \"node src/index.js\")",
+      "Bash(pkill -f \"node --watch src/index.js\")",
+      "Bash(curl -s \"https://api.telegram.org/bot8706063557:AAEUenjCjUK0MCPEVsaS1e5tvwCKVnKn_xQ/getUpdates\")",
+      "Bash(curl:*)",
+      "Bash(ffmpeg -version)",
+      "Bash(docker compose:*)",
+      "Read(//Users/turinglabs/Library/**)",
+      "Read(//Users/turinglabs/Library/Caches/**)",
+      "Bash(security find-generic-password:*)",
+      "Bash(claude config:*)",
+      "Bash(yarn add:*)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(node -e \":*)",
+      "Read(//Users/turinglabs/.ssh/**)",
+      "Bash(ssh:*)"
+    ]
+  }
+}

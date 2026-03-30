@@ -535,6 +535,13 @@
         FINDINGS
         <span class="count" id="list-count">0 entries</span>
       </div>
+      <div style="padding:6px 12px;border-bottom:1px solid var(--border)">
+        <input type="text" id="search-input" placeholder="> search posts, authors, analysis..."
+          style="width:100%;background:var(--bg);color:var(--green);border:1px solid var(--border);
+          font-family:inherit;font-size:11px;padding:4px 8px;outline:none;"
+          onfocus="this.style.borderColor='var(--green-dim)'"
+          onblur="this.style.borderColor='var(--border)'">
+      </div>
       <div class="filters">
         <button class="filter-btn active" data-filter="all">ALL</button>
         <button class="filter-btn" data-filter="real">REAL</button>
@@ -629,6 +636,7 @@ async function init() {
   renderMap();
   await Promise.all([loadStats(), loadPosts(), loadGeo()]);
   setupFilters();
+  setupSearch();
 
   // Start auto-refresh
   startAutoRefresh();
@@ -835,6 +843,41 @@ async function showDetail(redditId) {
       `).join("")}
     </div>
   `;
+}
+
+let searchTimeout = null;
+let searchQuery = "";
+
+function setupSearch() {
+  var input = document.getElementById("search-input");
+  input.addEventListener("input", function() {
+    clearTimeout(searchTimeout);
+    var q = input.value.trim();
+    searchTimeout = setTimeout(async function() {
+      if (q.length < 2) {
+        searchQuery = "";
+        await loadPosts();
+        return;
+      }
+      searchQuery = q;
+      try {
+        var res = await fetch("/api/search?q=" + encodeURIComponent(q));
+        var data = await res.json();
+        if (Array.isArray(data)) {
+          allPosts = data;
+          renderFindings();
+        }
+      } catch(e) { console.error("search error:", e); }
+    }, 300);
+  });
+
+  input.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") {
+      input.value = "";
+      searchQuery = "";
+      loadPosts();
+    }
+  });
 }
 
 function setupFilters() {
