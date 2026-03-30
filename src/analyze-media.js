@@ -114,24 +114,22 @@ async function analyzeWithClaude(imagePaths, post) {
     });
   }
 
-  const textPrompt = `You are analyzing ${mediaType} from a Reddit post about UFOs/aliens.
+  const textPrompt = `Describe what you see in this ${mediaType}. Be objective and factual.
 
-POST CONTEXT:
+POST CONTEXT (from Reddit):
 - Subreddit: r/${post.subreddit}
 - Title: ${post.title}
-- Author: u/${post.author}
 
-Analyze the ${mediaType} carefully and provide:
-1. What do you see in the ${mediaType}? Describe objects, shapes, lights, environment
-2. Does this look like a genuine unedited ${mediaType} or does it show signs of manipulation (CGI, compositing, lens artifacts vs real anomalies)?
-3. Can you identify the object(s)? (drone, aircraft, satellite, planet, lens flare, bird, balloon, etc.)
-4. Any frame-specific observations if multiple frames are provided
+Analyze the ${mediaType} and provide:
+1. What is in the ${mediaType}? Describe exactly what you see — objects, text, people, environment, sky, etc.
+2. Does it look like a genuine unedited ${mediaType} or does it show signs of manipulation (CGI, compositing, digital art)?
+3. If there are identifiable objects, what are they?
 
 Respond with a JSON object (no markdown fences):
 {
-  "description": "what you see",
+  "description": "factual description of what you see",
   "authenticity": "genuine" | "edited" | "cgi" | "inconclusive",
-  "identification": "your best guess of what the object is",
+  "identification": "what the content actually is (screenshot, photo, artwork, meme, etc.)",
   "confidence": 0.0-1.0,
   "frame_notes": ["note for each frame if multiple"],
   "reasoning": "brief explanation"
