@@ -3,19 +3,18 @@ import { MongoClient } from "mongodb";
 
 const SYSTEM_MSG = "You are an intelligence analyst. Always respond with valid JSON only, no markdown fences or explanation.";
 
+const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
+const NVIDIA_KEY = process.env.LLM_API_KEY;
+const OLLAMA_BASE = process.env.LLM_FALLBACK_BASE_URL || "https://ollama.com/v1";
+const OLLAMA_KEY = process.env.LLM_FALLBACK_API_KEY;
+
 const providers = [
-  {
-    name: "Ollama Cloud (qwen3.5)",
-    baseUrl: process.env.LLM_BASE_URL,
-    apiKey: process.env.LLM_API_KEY,
-    model: process.env.LLM_MODEL,
-  },
-  {
-    name: "NVIDIA Nemotron 3",
-    baseUrl: process.env.LLM_FALLBACK_BASE_URL,
-    apiKey: process.env.LLM_FALLBACK_API_KEY,
-    model: process.env.LLM_FALLBACK_MODEL,
-  },
+  { name: "NVIDIA Nemotron 3 Super 120B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/nemotron-3-super-120b-a12b" },
+  { name: "NVIDIA Llama 3.3 Nemotron Super 49B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.3-nemotron-super-49b-v1" },
+  { name: "NVIDIA Llama 3.1 Nemotron Ultra 253B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.1-nemotron-ultra-253b-v1" },
+  { name: "DeepSeek R1 Distill Qwen 32B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "deepseek-ai/deepseek-r1-distill-qwen-32b" },
+  { name: "Llama 3.1 8B Instruct", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "meta/llama-3.1-8b-instruct" },
+  { name: "Ollama Cloud Qwen 3.5", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "qwen3.5" },
 ];
 
 function extractJson(text) {
@@ -25,46 +24,68 @@ function extractJson(text) {
   return match ? match[0] : text;
 }
 
+function validateEval(parsed) {
+  const validVerdicts = ["real", "suspicious", "likely_fake"];
+  const issues = [];
+  if (!validVerdicts.includes(parsed.verdict)) issues.push(`bad verdict: "${parsed.verdict}"`);
+  if (typeof parsed.confidence !== "number" || parsed.confidence < 0 || parsed.confidence > 1) issues.push(`bad confidence: ${parsed.confidence}`);
+  if (typeof parsed.admiraltyRating !== "string" || !/^[A-F][1-6]$/.test(parsed.admiraltyRating)) issues.push(`bad admiraltyRating: "${parsed.admiraltyRating}"`);
+  if (typeof parsed.cbcaScore !== "number" || parsed.cbcaScore < 0 || parsed.cbcaScore > 19) issues.push(`bad cbcaScore: ${parsed.cbcaScore}`);
+  if (typeof parsed.reasoning !== "string" || parsed.reasoning.length < 20) issues.push("reasoning too short or missing");
+  if (typeof parsed.competingHypothesis !== "string") issues.push("missing competingHypothesis");
+  return issues;
+}
+
 async function callProvider(provider, prompt) {
   const start = performance.now();
-  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${provider.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: provider.model,
-      messages: [
-        { role: "system", content: SYSTEM_MSG },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.6,
-      chat_template_kwargs: { enable_thinking: false },
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
-
-  const elapsed = ((performance.now() - start) / 1000).toFixed(2);
-
-  if (!res.ok) {
-    const body = await res.text();
-    return { error: `HTTP ${res.status}: ${body.slice(0, 200)}`, elapsed };
-  }
-
-  const data = await res.json();
-  const msg = data.choices?.[0]?.message;
-  const raw = msg?.content || msg?.reasoning || JSON.stringify(data);
-  const usage = data.usage || {};
-
-  let parsed;
   try {
-    parsed = JSON.parse(extractJson(raw));
-  } catch {
-    parsed = { parseError: true, raw: raw.slice(0, 500) };
-  }
+    const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${provider.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [
+          { role: "system", content: SYSTEM_MSG },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.6,
+        chat_template_kwargs: { enable_thinking: false },
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
 
-  return { parsed, elapsed, usage, raw };
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+
+    if (!res.ok) {
+      const body = await res.text();
+      return { error: `HTTP ${res.status}: ${body.slice(0, 300)}`, elapsed };
+    }
+
+    const data = await res.json();
+    const msg = data.choices?.[0]?.message;
+    const raw = msg?.content || msg?.reasoning || JSON.stringify(data);
+    const usage = data.usage || {};
+    const finishReason = data.choices?.[0]?.finish_reason || "unknown";
+
+    let parsed;
+    let parseOk = true;
+    try {
+      parsed = JSON.parse(extractJson(raw));
+    } catch {
+      parsed = null;
+      parseOk = false;
+    }
+
+    const validation = parseOk && parsed ? validateEval(parsed) : ["JSON parse failed"];
+
+    return { parsed, elapsed, usage, finishReason, validation, parseOk, raw };
+  } catch (err) {
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    return { error: err.message, elapsed };
+  }
 }
 
 async function getLatestPost() {
@@ -147,9 +168,10 @@ async function main() {
   console.log(`Author: u/${post.author} | Score: ${post.score}`);
   console.log(`Previous eval: ${post.evaluation?.verdict} (${post.evaluation?.confidence})`);
   console.log(`Comments: ${comments.length}`);
-  console.log("\n" + "=".repeat(70) + "\n");
+  console.log("\n" + "=".repeat(80) + "\n");
 
   const prompt = buildPrompt(post, comments);
+  const results = [];
 
   for (const provider of providers) {
     if (!provider.baseUrl || !provider.apiKey) {
@@ -158,22 +180,55 @@ async function main() {
     }
 
     console.log(`Testing: ${provider.name} (${provider.model})`);
-    console.log("-".repeat(50));
+    console.log("-".repeat(60));
 
     const result = await callProvider(provider, prompt);
 
     if (result.error) {
-      console.log(`ERROR: ${result.error}`);
+      console.log(`  ERROR: ${result.error}`);
+      console.log(`  Time: ${result.elapsed}s`);
+      results.push({ name: provider.name, model: provider.model, error: result.error, elapsed: result.elapsed });
     } else {
-      console.log(`Time: ${result.elapsed}s`);
-      if (result.usage.prompt_tokens) {
-        console.log(`Tokens: ${result.usage.prompt_tokens} in / ${result.usage.completion_tokens} out`);
+      const tokIn = result.usage.prompt_tokens || "?";
+      const tokOut = result.usage.completion_tokens || "?";
+      console.log(`  Time: ${result.elapsed}s | Tokens: ${tokIn} in / ${tokOut} out | Finish: ${result.finishReason}`);
+      console.log(`  JSON valid: ${result.parseOk} | Schema issues: ${result.validation.length === 0 ? "none" : result.validation.join(", ")}`);
+      if (result.parsed) {
+        console.log(`  Verdict: ${result.parsed.verdict} (${result.parsed.confidence})`);
+        console.log(`  Admiralty: ${result.parsed.admiraltyRating} | CBCA: ${result.parsed.cbcaScore}`);
+        console.log(`  Hypothesis: ${result.parsed.competingHypothesis}`);
+        console.log(`  Reasoning: ${result.parsed.reasoning?.slice(0, 200)}`);
       }
-      console.log(`Result:`);
-      console.log(JSON.stringify(result.parsed, null, 2));
+      results.push({
+        name: provider.name,
+        model: provider.model,
+        elapsed: result.elapsed,
+        tokensIn: tokIn,
+        tokensOut: tokOut,
+        finishReason: result.finishReason,
+        jsonValid: result.parseOk,
+        schemaIssues: result.validation.length,
+        verdict: result.parsed?.verdict,
+        confidence: result.parsed?.confidence,
+        admiralty: result.parsed?.admiraltyRating,
+        cbca: result.parsed?.cbcaScore,
+        hypothesis: result.parsed?.competingHypothesis,
+      });
     }
 
-    console.log("\n" + "=".repeat(70) + "\n");
+    console.log("\n" + "=".repeat(80) + "\n");
+  }
+
+  // Summary table
+  console.log("\n## SUMMARY\n");
+  console.log("| Model | Time | Tok Out | JSON | Schema | Verdict | Conf | Admiralty | CBCA |");
+  console.log("|-------|------|---------|------|--------|---------|------|----------|------|");
+  for (const r of results) {
+    if (r.error) {
+      console.log(`| ${r.name} | ${r.elapsed}s | - | ERROR | - | - | - | - | - |`);
+    } else {
+      console.log(`| ${r.name} | ${r.elapsed}s | ${r.tokensOut} | ${r.jsonValid ? "Y" : "N"} | ${r.schemaIssues} | ${r.verdict || "-"} | ${r.confidence ?? "-"} | ${r.admiralty || "-"} | ${r.cbca ?? "-"} |`);
+    }
   }
 }
 
