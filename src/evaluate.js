@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { posts, comments } from "./db.js";
 import { config } from "./config.js";
 import { sendTelegram, formatEvaluation } from "./telegram.js";
@@ -14,20 +14,30 @@ function extractJson(text) {
 
 function runClaude(prompt) {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = spawn(
       config.claudeBin,
-      ["-p", prompt, "--output-format", "json", "--model", "claude-haiku-4-5-20251001"],
-      { timeout: 120_000, maxBuffer: 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) return reject(err);
-        try {
-          const parsed = JSON.parse(stdout);
-          resolve(parsed.result || stdout);
-        } catch {
-          resolve(stdout.trim());
-        }
-      }
+      ["-p", "-", "--output-format", "json", "--model", "claude-haiku-4-5-20251001"],
+      { timeout: 120_000, stdio: ["pipe", "pipe", "pipe"] }
     );
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+
+    child.on("close", (code) => {
+      if (code !== 0) return reject(new Error(stderr || `exit code ${code}`));
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve(parsed.result || stdout);
+      } catch {
+        resolve(stdout.trim());
+      }
+    });
+
+    child.on("error", reject);
+    child.stdin.write(prompt);
+    child.stdin.end();
   });
 }
 
