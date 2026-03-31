@@ -100,10 +100,35 @@
   .layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 340px 1fr;
+    grid-template-rows: var(--map-height, 340px) auto 1fr;
     gap: 1px;
     height: calc(100vh - 72px);
     background: var(--border);
+  }
+
+  /* === MAP RESIZE HANDLE === */
+  .map-resize-handle {
+    grid-column: 1 / 3;
+    height: 12px;
+    background: var(--bg-panel);
+    cursor: ns-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .map-resize-handle:hover {
+    background: rgba(0,255,65,0.03);
+  }
+
+  .map-resize-handle .grip {
+    width: 40px;
+    height: 3px;
+    border-top: 1px solid var(--text-dim);
+    border-bottom: 1px solid var(--text-dim);
   }
 
   .panel {
@@ -761,6 +786,10 @@
       </div>
     </div>
 
+    <div class="map-resize-handle" id="map-resize-handle">
+      <div class="grip"></div>
+    </div>
+
     <div class="panel" id="list-panel">
       <div class="panel-title">
         FINDINGS
@@ -879,6 +908,7 @@ async function init() {
   await Promise.all([loadStats(), loadPosts(), loadGeo()]);
   setupFilters();
   setupSearch();
+  if (!isMobile) setupMapResize();
 
   // Check if URL is /p/:redditId — open that post directly
   var pathMatch = window.location.pathname.match(/^\/p\/([a-zA-Z0-9_]+)/);
@@ -1267,6 +1297,51 @@ async function refreshAll() {
   btn.textContent = "REFRESH";
   btn.style.color = "";
   refreshing = false;
+}
+
+function setupMapResize() {
+  var handle = document.getElementById("map-resize-handle");
+  var layout = document.querySelector(".layout");
+  var dragging = false;
+
+  handle.addEventListener("mousedown", function(e) {
+    e.preventDefault();
+    dragging = true;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", function(e) {
+    if (!dragging) return;
+    var layoutRect = layout.getBoundingClientRect();
+    var newHeight = e.clientY - layoutRect.top;
+    var minH = 80;
+    var maxH = layoutRect.height - 150;
+    newHeight = Math.max(minH, Math.min(maxH, newHeight));
+    layout.style.setProperty("--map-height", newHeight + "px");
+    if (leafletMap) leafletMap.invalidateSize();
+  });
+
+  document.addEventListener("mouseup", function() {
+    if (dragging) {
+      dragging = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (leafletMap) leafletMap.invalidateSize();
+    }
+  });
+
+  // Double-click to toggle fullscreen map
+  handle.addEventListener("dblclick", function() {
+    var layoutRect = layout.getBoundingClientRect();
+    var current = parseInt(getComputedStyle(layout).getPropertyValue("--map-height")) || 340;
+    if (current > layoutRect.height * 0.6) {
+      layout.style.setProperty("--map-height", "340px");
+    } else {
+      layout.style.setProperty("--map-height", (layoutRect.height - 50) + "px");
+    }
+    if (leafletMap) setTimeout(function() { leafletMap.invalidateSize(); }, 100);
+  });
 }
 
 function changeSort() {
