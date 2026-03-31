@@ -19,7 +19,7 @@ export function startServer(port = 3666) {
 
     const docs = await posts()
       .find(filter)
-      .sort({ evaluatedAt: -1, insertedAt: -1 })
+      .sort({ createdUtc: -1 })
       .limit(parseInt(req.query.limit || "200", 10))
       .toArray();
 
@@ -138,7 +138,7 @@ export function startServer(port = 3666) {
           { "evaluation.reasoning": { $regex: q, $options: "i" } },
         ],
       })
-      .sort({ evaluatedAt: -1, insertedAt: -1 })
+      .sort({ createdUtc: -1 })
       .limit(100)
       .toArray();
 

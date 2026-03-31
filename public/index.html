@@ -1018,6 +1018,7 @@ async function loadPosts() {
       var ids = new Set(evalData.map(function(p) { return p.redditId; }));
       var extra = (remData || []).filter(function(p) { return !ids.has(p.redditId); });
       allPosts = evalData.concat(extra);
+      allPosts.sort(function(a, b) { return (b.createdUtc || 0) - (a.createdUtc || 0); });
       renderFindings();
     }
   } catch(e) { console.error("loadPosts error:", e); }
