@@ -26,6 +26,7 @@ src/
 ├── evaluate.js         Claude Code CLI non-interactive evaluator
 ├── analyze-media.js    Image analysis via Anthropic Vision API (base64)
 ├── check-removals.js   Tracks deleted/removed posts, flags censorship
+├── check-users.js      User humanity profiling (karma, age, comment patterns, bot detection)
 ├── geocode.js          Location extraction + Nominatim geocoding
 ├── server.js           Express API + static file server (port 3666)
 ├── telegram.js         Telegram Bot API notifications
@@ -46,6 +47,7 @@ public/
 | Geocode | `*/2 * * * *` | Extract locations from titles, geocode via Nominatim |
 | Media | `*/3 * * * *` | Download images, analyze via Anthropic Vision API |
 | Removals | `*/10 * * * *` | Check if posts were deleted/removed, flag censorship |
+| Users | `*/2 * * * *` | Profile Reddit users, calculate humanity score (30 users/batch) |
 
 ## API Endpoints
 
@@ -56,11 +58,13 @@ public/
 - `GET /api/removals` — Posts that were deleted/removed from Reddit
 - `GET /api/stats/removals` — Removal counts + censorship candidates
 - `GET /api/search?q=term` — Search posts by title, body, author, analysis
+- `GET /api/users/:username` — User humanity profile with signals
 
 ## MongoDB Collections
 
-- **posts** — indexes: `redditId` (unique), `subreddit+createdUtc`, `evaluated`
+- **posts** — indexes: `redditId` (unique), `evaluated`
 - **comments** — indexes: `redditId` (unique), `postRedditId`
+- **users** — indexes: `username` (unique); humanity score 0-100, signals array
 
 ## Running
 
@@ -78,3 +82,6 @@ docker compose up -d   # first time: docker exec -it nerd-nerd-1 claude then /lo
 - Telegram sends formatted HTML messages with verdict + reasoning + reddit link
 - Removal tracking: `removedStatus` field on posts (active, removed:moderator, removed:reddit, deleted:author)
 - Censorship detection: alerts when posts rated "real" (confidence >= 0.6) are removed
+- User humanity scoring: account age, karma ratio, vocab diversity, comment timing, duplicate detection
+- Evaluation uses intelligence frameworks: Admiralty Code, CBCA, ACH, deception indicators
+- New eval fields: `admiraltyRating`, `cbcaScore`, `competingHypothesis`
