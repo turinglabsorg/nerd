@@ -854,11 +854,7 @@ function renderFindings() {
       '<div class="finding-header">' +
         '<span class="verdict-badge verdict-' + verdict + '">' + verdict.toUpperCase() + '</span>' +
         removedHtml +
-        '<span>' + (conf * 100).toFixed(0) + '%' +
-          '<span class="confidence-bar">' +
-            '<span class="confidence-bar-inner" style="width:' + (conf * 100) + '%;background:' + barColor + '"></span>' +
-          '</span>' +
-        '</span>' +
+        '<span style="color:' + barColor + '">' + (conf * 100).toFixed(0) + '%</span>' +
       '</div>' +
       '<div class="finding-title">' + escapeHtml(post.title) + '</div>' +
       '<div class="finding-meta">' + escapeHtml(meta) + '</div>';
