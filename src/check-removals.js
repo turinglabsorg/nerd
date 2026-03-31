@@ -1,4 +1,5 @@
 import { posts } from "./db.js";
+import { config } from "./config.js";
 import { sendTelegram } from "./telegram.js";
 
 const UA = "nerd-agent/1.0";
@@ -111,7 +112,7 @@ export async function checkRemovals() {
             `<i>${escapeHtml(post.evaluation?.reasoning?.slice(0, 200) || "")}</i>`,
             alert,
             ``,
-            `<a href="${post.permalink}">Open on Reddit</a>`,
+            `<a href="${config.baseUrl}/p/${post.redditId}">View on NERD</a> | <a href="${post.permalink}">Reddit</a>`,
           ].join("\n")
         );
 

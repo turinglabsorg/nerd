@@ -40,7 +40,7 @@ export function formatEvaluation(post, evaluation) {
     ``,
     `<i>${escapeHtml(evaluation.reasoning)}</i>`,
     ``,
-    `<a href="${post.permalink}">Open on Reddit</a>`,
+    `<a href="${config.baseUrl}/p/${post.redditId}">View on NERD</a> | <a href="${post.permalink}">Reddit</a>`,
   ].join("\n");
 }
 

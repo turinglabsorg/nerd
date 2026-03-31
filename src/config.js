@@ -14,4 +14,5 @@ export const config = {
   anthropicKey: process.env.ANTHROPIC_API_KEY || "",
   telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
   telegramChatId: process.env.TELEGRAM_CHAT_ID || "",
+  baseUrl: process.env.BASE_URL || "https://nerd-828110571677.europe-west1.run.app",
 };

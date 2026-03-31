@@ -189,6 +189,11 @@ export function startServer(port = 3666) {
     }
   });
 
+  // Serve single post page (SPA handles it client-side)
+  app.get("/p/:redditId", (req, res) => {
+    res.sendFile(path.join(__dirname, "../public/index.html"));
+  });
+
   app.listen(port, () => {
     console.log(`[server] UI running at http://localhost:${port}`);
   });

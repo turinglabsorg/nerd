@@ -880,6 +880,12 @@ async function init() {
   setupFilters();
   setupSearch();
 
+  // Check if URL is /p/:redditId — open that post directly
+  var pathMatch = window.location.pathname.match(/^\/p\/([a-zA-Z0-9_]+)/);
+  if (pathMatch) {
+    showDetail(pathMatch[1]);
+  }
+
   // Start auto-refresh
   startAutoRefresh();
 }
