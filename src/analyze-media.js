@@ -169,6 +169,9 @@ function extractJson(text) {
 }
 
 export async function analyzeMedia() {
+  if (!config.anthropicKey) {
+    return 0;
+  }
   // Prioritize images (reliable download), then videos
   const pending = await posts()
     .find({
