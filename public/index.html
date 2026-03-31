@@ -476,6 +476,14 @@
     );
   }
 
+  /* === HUMANITY SCORES === */
+  .detail-comment .author {
+    cursor: pointer;
+  }
+  .detail-comment .author:hover {
+    text-decoration: underline;
+  }
+
   /* === REMOVALS === */
   .verdict-removed\:moderator, .verdict-removed\:reddit,
   .verdict-deleted, .verdict-deleted\:author {
@@ -902,14 +910,19 @@ async function showDetail(redditId) {
     </div>` : ''}
 
     <div class="detail-section">
-      <h3>> COMMENTS (${(post.comments || []).length})</h3>
-      ${(post.comments || []).map(c => `
-        <div class="detail-comment">
-          <span class="author">u/${escapeHtml(c.author)}</span>
-          <span class="score">(${c.score}pts)</span><br>
+      <h3 style="display:flex;justify-content:space-between;align-items:center">> COMMENTS (${(post.comments || []).length}) ${renderHumanityBar(post.humanityStats)}</h3>
+      ${(post.comments || []).map(c => {
+        var hScore = c.humanityScore;
+        var hColor = hScore === null ? 'var(--text-dim)' : hScore >= 70 ? 'var(--green)' : hScore >= 40 ? 'var(--amber)' : 'var(--red)';
+        var hLabel = hScore === null ? '' : ' [' + hScore + '% human]';
+        return `
+        <div class="detail-comment" style="border-left-color:${hColor}">
+          <span class="author" style="cursor:pointer" onclick="showUser('${escapeHtml(c.author)}')">u/${escapeHtml(c.author)}</span>
+          <span class="score">(${c.score}pts)</span>
+          ${hScore !== null ? '<span style="color:' + hColor + ';font-size:9px;margin-left:4px">' + hLabel + '</span>' : ''}<br>
           ${escapeHtml(c.body?.slice(0, 300) || '')}${(c.body?.length || 0) > 300 ? '...' : ''}
-        </div>
-      `).join("")}
+        </div>`;
+      }).join("")}
     </div>
   `;
 }
@@ -1062,6 +1075,56 @@ function renderMediaSection(post) {
   }
 
   return html;
+}
+
+function renderHumanityBar(stats) {
+  if (!stats || !stats.checked) return '';
+  var botColor = stats.botLikely > 0 ? '#ff3333' : 'var(--text-dim)';
+  return '<span style="font-size:9px;font-weight:400;color:var(--text-dim)">' +
+    '<span style="color:var(--green)">' + stats.humans + ' human</span> / ' +
+    '<span style="color:var(--amber)">' + stats.mixed + ' mixed</span> / ' +
+    '<span style="color:' + botColor + '">' + stats.botLikely + ' bot-like</span>' +
+    ' (' + stats.avgHumanity + '% avg)' +
+    '</span>';
+}
+
+async function showUser(username) {
+  var body = document.getElementById("detail-body");
+  body.innerHTML = '<div class="detail-empty" style="color:var(--green)">Loading u/' + username + '...</div>';
+  document.getElementById("detail-id").textContent = 'u/' + username;
+
+  try {
+    var res = await fetch("/api/users/" + encodeURIComponent(username));
+    if (!res.ok) {
+      body.innerHTML = '<div class="detail-empty">User not profiled yet</div>';
+      return;
+    }
+    var user = await res.json();
+    var hColor = user.humanityScore >= 70 ? 'var(--green)' : user.humanityScore >= 40 ? 'var(--amber)' : 'var(--red)';
+    var hLabel = user.humanityScore >= 70 ? 'HUMAN' : user.humanityScore >= 40 ? 'MIXED' : 'BOT-LIKE';
+
+    body.innerHTML =
+      '<div class="detail-section">' +
+        '<h3>> USER PROFILE: u/' + escapeHtml(username) + '</h3>' +
+        '<p style="margin:4px 0"><span style="color:' + hColor + ';font-weight:700;font-size:16px">' + user.humanityScore + '%</span> <span style="color:' + hColor + '">' + hLabel + '</span></p>' +
+      '</div>' +
+      '<div class="detail-section">' +
+        '<h3>> ACCOUNT</h3>' +
+        '<p>Karma: ' + (user.totalKarma || 'N/A') + ' (link: ' + (user.linkKarma || 0) + ', comment: ' + (user.commentKarma || 0) + ')</p>' +
+        '<p>Email verified: ' + (user.hasVerifiedEmail ? 'yes' : 'no') + '</p>' +
+        '<p>Comments tracked: ' + (user.commentCount || 0) + '</p>' +
+        (user.isSuspended ? '<p style="color:var(--red)">ACCOUNT SUSPENDED/DELETED</p>' : '') +
+      '</div>' +
+      '<div class="detail-section">' +
+        '<h3>> HUMANITY SIGNALS</h3>' +
+        (user.humanitySignals || []).map(function(s) {
+          var sigColor = s.includes('(+') ? 'var(--green)' : s.includes('(-') ? 'var(--red)' : 'var(--text-dim)';
+          return '<p style="color:' + sigColor + '">' + escapeHtml(s) + '</p>';
+        }).join('') +
+      '</div>';
+  } catch(e) {
+    body.innerHTML = '<div class="detail-empty">Error: ' + escapeHtml(e.message) + '</div>';
+  }
 }
 
 function openLightbox(type, src) {

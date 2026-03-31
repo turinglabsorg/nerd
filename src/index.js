@@ -7,6 +7,7 @@ import { evaluatePosts } from "./evaluate.js";
 import { geocodePosts } from "./geocode.js";
 import { analyzeMedia } from "./analyze-media.js";
 import { checkRemovals } from "./check-removals.js";
+import { checkUsers } from "./check-users.js";
 import { startServer } from "./server.js";
 
 const MODE = process.env.NERD_MODE || "all"; // "all", "scraper", "web"
@@ -71,6 +72,11 @@ async function main() {
   cron.schedule("*/10 * * * *", async () => {
     console.log("\n[cron] checking removals...");
     await checkRemovals();
+  });
+
+  // Cron: check user humanity (every 5 minutes)
+  cron.schedule("*/5 * * * *", async () => {
+    await checkUsers();
   });
 
   // Cron: analyze media (every 3 minutes)

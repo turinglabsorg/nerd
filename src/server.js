@@ -2,6 +2,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { posts, comments } from "./db.js";
+import { getPostHumanityStats } from "./check-users.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -133,7 +134,37 @@ export function startServer(port = 3666) {
       .limit(50)
       .toArray();
 
-    res.json({ ...post, comments: postComments });
+    // Enrich comments with user humanity scores
+    const authorNames = [...new Set(postComments.map(c => c.author).filter(Boolean))];
+    let userMap = {};
+    try {
+      const userDocs = await posts().s.db.collection("users")
+        .find({ username: { $in: authorNames } })
+        .project({ username: 1, humanityScore: 1 })
+        .toArray();
+      userMap = Object.fromEntries(userDocs.map(u => [u.username, u.humanityScore]));
+    } catch {}
+
+    const enrichedComments = postComments.map(c => ({
+      ...c,
+      humanityScore: userMap[c.author] ?? null,
+    }));
+
+    const humanityStats = await getPostHumanityStats(req.params.redditId);
+
+    res.json({ ...post, comments: enrichedComments, humanityStats });
+  });
+
+  // API: user profile
+  app.get("/api/users/:username", async (req, res) => {
+    try {
+      const user = await posts().s.db.collection("users")
+        .findOne({ username: req.params.username });
+      if (!user) return res.status(404).json({ error: "not found" });
+      res.json(user);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.listen(port, () => {

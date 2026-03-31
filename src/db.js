@@ -22,6 +22,7 @@ export async function connect() {
     ["posts", { evaluated: 1 }],
     ["comments", { redditId: 1 }, { unique: true }],
     ["comments", { postRedditId: 1 }],
+    ["users", { username: 1 }, { unique: true }],
   ];
 
   for (const [col, keys, opts] of indexes) {
