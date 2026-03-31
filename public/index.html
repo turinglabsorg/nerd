@@ -102,7 +102,7 @@
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 340px 1fr;
     gap: 1px;
-    height: calc(100vh - 50px);
+    height: calc(100vh - 72px);
     background: var(--border);
   }
 
@@ -231,16 +231,17 @@
 
   .finding-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 6px;
     margin-bottom: 4px;
+    flex-wrap: wrap;
   }
 
   .verdict-badge {
-    padding: 1px 6px;
-    font-size: 10px;
+    padding: 1px 4px;
+    font-size: 9px;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     border: 1px solid;
   }
 
@@ -476,6 +477,27 @@
     );
   }
 
+  /* === STATS BAR === */
+  .stats-bar {
+    width: 100%;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-evenly;
+  }
+
+  .stats-bar .stat {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .stats-bar .stat .val {
+    color: var(--green);
+    font-weight: 700;
+  }
+
   /* === HUMANITY SCORES === */
   .detail-comment .author {
     cursor: pointer;
@@ -493,21 +515,20 @@
 
   .removal-badge {
     display: inline-block;
-    padding: 1px 5px;
-    font-size: 9px;
+    padding: 1px 4px;
+    font-size: 8px;
     font-weight: 700;
     color: #ff3333;
     border: 1px solid #3d0000;
     background: rgba(255,51,51,0.08);
-    margin-left: 4px;
     letter-spacing: 0.5px;
   }
 
   .censorship-alert {
     background: rgba(255,51,51,0.05);
     border: 1px solid #3d0000;
-    padding: 2px 6px;
-    font-size: 9px;
+    padding: 1px 4px;
+    font-size: 8px;
     color: #ff3333;
     animation: blink-alert 2s ease-in-out infinite;
   }
@@ -547,16 +568,17 @@
 <div id="app" style="display:none">
   <div class="header">
     <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 10 48 30" style="width:28px;height:16px;vertical-align:middle;margin-right:6px"><ellipse cx="32" cy="30" rx="20" ry="6" fill="none" stroke="#00ff41" stroke-width="1.5"/><path d="M20 30 Q26 18 32 16 Q38 18 44 30" fill="none" stroke="#00ff41" stroke-width="1.5"/><circle cx="24" cy="30" r="1.5" fill="#00ff41"/><circle cx="32" cy="30" r="1.5" fill="#ffb000"/><circle cx="40" cy="30" r="1.5" fill="#00ff41"/></svg>NERD <span>// Neural Evaluation of Reddit Data v1.0</span></h1>
-    <div class="header-stats">
-      <div>POSTS <span class="val" id="stat-posts">-</span></div>
-      <div>EVALUATED <span class="val" id="stat-eval">-</span></div>
-      <div>COMMENTS <span class="val" id="stat-comments">-</span></div>
-      <div>PENDING <span class="val" id="stat-pending">-</span></div>
-      <div>USERS <span class="val" id="stat-users">-</span></div>
-      <div>BOTS <span class="val" style="color:#ff3333" id="stat-bots">-</span></div>
-      <div>REMOVED <span class="val" style="color:#ff3333" id="stat-removed">-</span></div>
-      <div id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP: <span id="stat-censorship-count">0</span></span></div>
-    </div>
+    <div id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP: <span id="stat-censorship-count">0</span></span></div>
+  </div>
+
+  <div class="stats-bar">
+    <span class="stat">POSTS <span class="val" id="stat-posts">-</span></span>
+    <span class="stat">EVALUATED <span class="val" id="stat-eval">-</span></span>
+    <span class="stat">COMMENTS <span class="val" id="stat-comments">-</span></span>
+    <span class="stat">PENDING <span class="val" id="stat-pending">-</span></span>
+    <span class="stat">USERS <span class="val" id="stat-users">-</span></span>
+    <span class="stat">BOTS <span class="val" style="color:#ff3333" id="stat-bots">-</span></span>
+    <span class="stat">REMOVED <span class="val" style="color:#ff3333" id="stat-removed">-</span></span>
   </div>
 
   <div class="layout">
