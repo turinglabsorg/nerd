@@ -779,6 +779,14 @@
         <button class="filter-btn" data-filter="likely_fake">FAKE</button>
         <button class="filter-btn" data-filter="removed" style="color:#ff3333;border-color:#3d0000">REMOVED</button>
         <span style="flex:1"></span>
+        <select id="sort-select" onchange="changeSort()" style="
+          background:var(--bg);color:var(--text-dim);border:1px solid var(--border);
+          font-family:inherit;font-size:10px;padding:2px 4px;cursor:pointer;">
+          <option value="newest">NEWEST</option>
+          <option value="oldest">OLDEST</option>
+          <option value="score">SCORE</option>
+          <option value="confidence">CONFIDENCE</option>
+        </select>
         <button class="filter-btn active" id="btn-auto" onclick="toggleAuto()">AUTO</button>
         <select id="auto-interval" onchange="setAutoInterval()" style="
           background:var(--bg);color:var(--text-dim);border:1px solid var(--border);
@@ -1050,8 +1058,17 @@ function renderFindings() {
     });
   }
 
-  // Sort by post date, most recent first
-  filtered.sort(function(a, b) { return (b.createdUtc || 0) - (a.createdUtc || 0); });
+  // Sort
+  var sortMode = document.getElementById("sort-select")?.value || "newest";
+  if (sortMode === "newest") {
+    filtered.sort(function(a, b) { return (b.createdUtc || 0) - (a.createdUtc || 0); });
+  } else if (sortMode === "oldest") {
+    filtered.sort(function(a, b) { return (a.createdUtc || 0) - (b.createdUtc || 0); });
+  } else if (sortMode === "score") {
+    filtered.sort(function(a, b) { return (b.score || 0) - (a.score || 0); });
+  } else if (sortMode === "confidence") {
+    filtered.sort(function(a, b) { return (b.evaluation?.confidence || 0) - (a.evaluation?.confidence || 0); });
+  }
 
   document.getElementById("list-count").textContent = filtered.length + " entries";
 
@@ -1236,6 +1253,10 @@ async function refreshAll() {
   btn.textContent = "REFRESH";
   btn.style.color = "";
   refreshing = false;
+}
+
+function changeSort() {
+  renderFindings();
 }
 
 function toggleAuto() {
