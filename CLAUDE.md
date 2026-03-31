@@ -25,6 +25,7 @@ src/
 ├── scrape-comments.js  Comment fetcher with re-fetch + re-eval flagging
 ├── evaluate.js         Claude Code CLI non-interactive evaluator
 ├── analyze-media.js    Image analysis via Anthropic Vision API (base64)
+├── check-removals.js   Tracks deleted/removed posts, flags censorship
 ├── geocode.js          Location extraction + Nominatim geocoding
 ├── server.js           Express API + static file server (port 3666)
 ├── telegram.js         Telegram Bot API notifications
@@ -44,6 +45,7 @@ public/
 | Evaluate | `* * * * *` | 1 post/min via `claude -p` (Haiku model) |
 | Geocode | `*/2 * * * *` | Extract locations from titles, geocode via Nominatim |
 | Media | `*/3 * * * *` | Download images, analyze via Anthropic Vision API |
+| Removals | `*/10 * * * *` | Check if posts were deleted/removed, flag censorship |
 
 ## API Endpoints
 
@@ -51,6 +53,9 @@ public/
 - `GET /api/posts/:redditId` — Single post with comments
 - `GET /api/stats` — Counts and verdict breakdown
 - `GET /api/geo` — Posts with geolocation data
+- `GET /api/removals` — Posts that were deleted/removed from Reddit
+- `GET /api/stats/removals` — Removal counts + censorship candidates
+- `GET /api/search?q=term` — Search posts by title, body, author, analysis
 
 ## MongoDB Collections
 
@@ -71,3 +76,5 @@ docker compose up -d   # first time: docker exec -it nerd-nerd-1 claude then /lo
 - v.redd.it videos blocked by Reddit (403), only images analyzed currently
 - Posts get `needsReeval: true` when new comments arrive
 - Telegram sends formatted HTML messages with verdict + reasoning + reddit link
+- Removal tracking: `removedStatus` field on posts (active, removed:moderator, removed:reddit, deleted:author)
+- Censorship detection: alerts when posts rated "real" (confidence >= 0.6) are removed
