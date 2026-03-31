@@ -215,6 +215,15 @@
     100% { transform: scale(2.5); opacity: 0; }
   }
 
+  .highlight-ring {
+    animation: highlight-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes highlight-pulse {
+    0%, 100% { stroke-opacity: 1; fill-opacity: 0.1; }
+    50% { stroke-opacity: 0.4; fill-opacity: 0.02; }
+  }
+
   /* === FINDINGS LIST === */
   .finding {
     border: 1px solid var(--border);
@@ -506,6 +515,30 @@
     text-decoration: underline;
   }
 
+  /* === TOOLTIPS === */
+  .tip {
+    position: relative;
+    cursor: help;
+  }
+
+  .tip::after {
+    content: attr(data-tip);
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: rgba(0,0,0,0.95);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 8px;
+    font-size: 9px;
+    white-space: nowrap;
+    z-index: 50;
+    margin-bottom: 4px;
+  }
+
+  .tip:hover::after { display: block; }
+
   /* === REMOVALS === */
   .verdict-removed\:moderator, .verdict-removed\:reddit,
   .verdict-deleted, .verdict-deleted\:author {
@@ -557,6 +590,127 @@
   }
 
   #boot-screen.hidden { display: none; }
+
+  /* === MOBILE TABS === */
+  .mobile-tabs {
+    display: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+
+  .mobile-tabs button {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 6px 0;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+
+  .mobile-tabs button.active {
+    color: var(--green);
+    border-bottom-color: var(--green);
+  }
+
+  /* === MAP TOGGLE === */
+  .map-toggle {
+    display: none;
+    width: 100%;
+    background: var(--bg-panel);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 10px;
+    padding: 4px 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .map-toggle:hover { color: var(--green); }
+
+  /* === MOBILE RESPONSIVE === */
+  @media (max-width: 768px) {
+    .header { padding: 8px 12px; }
+
+    .header h1 { font-size: 11px; letter-spacing: 1px; }
+    .header h1 span { display: none; }
+
+    .stats-bar {
+      flex-wrap: wrap;
+      height: auto;
+      padding: 4px 0;
+      gap: 0;
+    }
+
+    .stats-bar .stat {
+      font-size: 9px;
+      padding: 2px 8px;
+    }
+
+    .mobile-tabs {
+      display: flex;
+    }
+
+    .map-toggle {
+      display: block;
+    }
+
+    .layout {
+      display: flex;
+      flex-direction: column;
+      grid-template-columns: unset;
+      grid-template-rows: unset;
+      height: calc(100vh - 120px);
+    }
+
+    #map-panel {
+      grid-column: unset;
+      height: 0;
+      min-height: 0;
+      overflow: hidden;
+      transition: height 0.3s;
+    }
+
+    #map-panel.map-open {
+      height: 250px;
+      min-height: 250px;
+    }
+
+    #list-panel {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #detail-panel {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 100;
+      background: var(--bg);
+    }
+
+    #detail-panel.mobile-visible {
+      display: flex;
+    }
+
+    .filters {
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .filter-btn { font-size: 9px; padding: 2px 6px; }
+
+    .finding { padding: 6px 8px; }
+    .finding-title { font-size: 10px; }
+
+    /* map filter already on .leaflet-tile-pane for desktop */
+  }
 </style>
 </head>
 <body>
@@ -568,7 +722,6 @@
 <div id="app" style="display:none">
   <div class="header">
     <h1><svg xmlns="http://www.w3.org/2000/svg" viewBox="8 10 48 30" style="width:28px;height:16px;vertical-align:middle;margin-right:6px"><ellipse cx="32" cy="30" rx="20" ry="6" fill="none" stroke="#00ff41" stroke-width="1.5"/><path d="M20 30 Q26 18 32 16 Q38 18 44 30" fill="none" stroke="#00ff41" stroke-width="1.5"/><circle cx="24" cy="30" r="1.5" fill="#00ff41"/><circle cx="32" cy="30" r="1.5" fill="#ffb000"/><circle cx="40" cy="30" r="1.5" fill="#00ff41"/></svg>NERD <span>// Neural Evaluation of Reddit Data v1.0</span></h1>
-    <div id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP: <span id="stat-censorship-count">0</span></span></div>
   </div>
 
   <div class="stats-bar">
@@ -579,7 +732,17 @@
     <span class="stat">USERS <span class="val" id="stat-users">-</span></span>
     <span class="stat">BOTS <span class="val" style="color:#ff3333" id="stat-bots">-</span></span>
     <span class="stat">REMOVED <span class="val" style="color:#ff3333" id="stat-removed">-</span></span>
+    <span class="stat" id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP <span id="stat-censorship-count">0</span></span></span>
   </div>
+
+  <div class="mobile-tabs" id="mobile-tabs">
+    <button class="active" data-tab="findings" onclick="switchTab('findings')">FINDINGS</button>
+    <button data-tab="analysis" onclick="switchTab('analysis')">ANALYSIS</button>
+  </div>
+
+  <button class="map-toggle" id="map-toggle" onclick="toggleMap()">
+    [+] SHOW MAP (<span id="map-count-mobile">0</span> geolocated)
+  </button>
 
   <div class="layout">
     <div class="panel" id="map-panel">
@@ -631,7 +794,7 @@
 
     <div class="panel" id="detail-panel">
       <div class="panel-title">
-        POST ANALYSIS
+        <span><span class="mobile-back" onclick="switchTab('findings')" style="display:none;cursor:pointer;margin-right:8px;color:var(--cyan)">&lt; BACK</span>POST ANALYSIS</span>
         <span class="count" id="detail-id">select a finding</span>
       </div>
       <div class="panel-body" id="detail-body">
@@ -662,6 +825,8 @@
 <script>
 let leafletMap = null;
 let markerLayer = null;
+let markerMap = {}; // redditId -> marker
+let activeHighlight = null;
 
 let allPosts = [];
 let geoData = [];
@@ -756,9 +921,36 @@ function makeMarkerIcon(verdict) {
   });
 }
 
+function highlightMarker(redditId) {
+  // Remove previous highlight
+  if (activeHighlight) {
+    leafletMap.removeLayer(activeHighlight);
+    activeHighlight = null;
+  }
+
+  var marker = markerMap[redditId];
+  if (!marker || !leafletMap) return;
+
+  var latlng = marker.getLatLng();
+  leafletMap.flyTo(latlng, 5, { duration: 0.8 });
+
+  // Add a pulsing ring highlight
+  activeHighlight = L.circleMarker(latlng, {
+    radius: 20,
+    color: '#00ffff',
+    weight: 2,
+    fillColor: '#00ffff',
+    fillOpacity: 0.1,
+    className: 'highlight-ring',
+  }).addTo(leafletMap);
+
+  marker.openPopup();
+}
+
 function renderMarkers() {
   if (!markerLayer) return;
   markerLayer.clearLayers();
+  markerMap = {};
 
   let count = 0;
   for (const post of geoData) {
@@ -781,11 +973,14 @@ function renderMarkers() {
       `, { className: '' })
       .on('click', () => showDetail(post.redditId));
 
+    markerMap[post.redditId] = marker;
     markerLayer.addLayer(marker);
     count++;
   }
 
   document.getElementById("map-count").textContent = `${count} geolocated`;
+  var mc = document.getElementById("map-count-mobile");
+  if (mc) mc.textContent = count;
 }
 
 async function loadStats() {
@@ -874,6 +1069,7 @@ function renderFindings() {
     if (post.geo && post.geo.query) meta += " \u00b7 " + post.geo.query;
     if (post.mediaAnalysis) meta += " [" + (post.mediaAnalysis.authenticity || "MEDIA") + "]";
     if (isMedia(post.url)) meta += " [IMG/VID]";
+    if (post.geo && post.geo.lat) meta += " [GEO]";
 
     var removedHtml = "";
     if (post.removedStatus && post.removedStatus !== "active") {
@@ -903,6 +1099,9 @@ function renderFindings() {
 }
 
 async function showDetail(redditId) {
+  lastViewedPostId = redditId;
+  highlightMarker(redditId);
+  if (isMobile) switchTab("analysis");
   const body = document.getElementById("detail-body");
   body.innerHTML = `<div class="detail-empty" style="color:var(--green)">Loading ${redditId}...</div>`;
   document.getElementById("detail-id").textContent = redditId;
@@ -913,10 +1112,17 @@ async function showDetail(redditId) {
 
   const verdictClass = `verdict-${e.verdict || 'error'}`;
 
+  // Check if OP is profiled
+  var opProfiled = false;
+  try { var opRes = await fetch("/api/users/" + encodeURIComponent(post.author)); opProfiled = opRes.ok; } catch {}
+  var opEl = opProfiled
+    ? '<span style="cursor:pointer;color:var(--cyan)" onclick="showUser(\'' + escapeHtml(post.author) + '\')">u/' + escapeHtml(post.author) + '</span>'
+    : '<span class="tip" data-tip="not profiled yet" style="color:var(--text-dim)">u/' + escapeHtml(post.author) + '</span>';
+
   body.innerHTML = `
     <div class="detail-section" style="margin-bottom:6px">
       <p style="color:var(--green);font-weight:700;margin-bottom:2px">${escapeHtml(post.title)}</p>
-      <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | <span style="cursor:pointer;color:var(--cyan)" onclick="showUser('${escapeHtml(post.author)}')">u/${post.author}</span> | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
+      <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | ${opEl} | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
       ${post.humanityStats && post.humanityStats.checked > 0 ? '<p style="font-size:10px;margin:2px 0 0 0">' + renderHumanityBar(post.humanityStats) + '</p>' : ''}
     </div>
 
@@ -943,11 +1149,14 @@ async function showDetail(redditId) {
         var hScore = c.humanityScore;
         var hColor = hScore === null ? 'var(--text-dim)' : hScore >= 70 ? 'var(--green)' : hScore >= 40 ? 'var(--amber)' : 'var(--red)';
         var hLabel = hScore === null ? '' : ' [' + hScore + '% human]';
+        var authorEl = hScore !== null
+          ? '<span class="author" style="cursor:pointer" onclick="showUser(\'' + escapeHtml(c.author) + '\')">u/' + escapeHtml(c.author) + '</span>'
+          : '<span class="author tip" data-tip="not profiled yet" style="color:var(--text-dim);cursor:default">u/' + escapeHtml(c.author) + '</span>';
         return `
         <div class="detail-comment" style="border-left-color:${hColor}">
-          <span class="author" style="cursor:pointer" onclick="showUser('${escapeHtml(c.author)}')">u/${escapeHtml(c.author)}</span>
+          ${authorEl}
           <span class="score">(${c.score}pts)</span>
-          ${hScore !== null ? '<span style="color:' + hColor + ';font-size:9px;margin-left:4px">' + hLabel + '</span>' : ''}<br>
+          ${hScore !== null ? '<span style="color:' + hColor + ';font-size:9px;margin-left:4px">' + hLabel + '</span>' : '<span class="tip" data-tip="not profiled yet" style="color:var(--text-dim);font-size:9px;margin-left:4px">[pending]</span>'}<br>
           ${escapeHtml(c.body?.slice(0, 300) || '')}${(c.body?.length || 0) > 300 ? '...' : ''}
         </div>`;
       }).join("")}
@@ -967,6 +1176,12 @@ function setupSearch() {
       if (q.length < 2) {
         searchQuery = "";
         await loadPosts();
+        return;
+      }
+      // Search users when query starts with u/
+      if (q.startsWith("u/") && q.length > 2) {
+        var uname = q.slice(2);
+        showUser(uname);
         return;
       }
       searchQuery = q;
@@ -1105,6 +1320,40 @@ function renderMediaSection(post) {
   return html;
 }
 
+var isMobile = window.innerWidth <= 768;
+window.addEventListener("resize", function() { isMobile = window.innerWidth <= 768; });
+
+function switchTab(tab) {
+  var tabs = document.querySelectorAll("#mobile-tabs button");
+  tabs.forEach(function(b) { b.classList.toggle("active", b.dataset.tab === tab); });
+
+  var listPanel = document.getElementById("list-panel");
+  var detailPanel = document.getElementById("detail-panel");
+  var backBtn = document.querySelector(".mobile-back");
+
+  if (tab === "findings") {
+    listPanel.style.display = "";
+    detailPanel.classList.remove("mobile-visible");
+    if (backBtn) backBtn.style.display = "none";
+  } else {
+    listPanel.style.display = "none";
+    detailPanel.classList.add("mobile-visible");
+    if (backBtn) backBtn.style.display = isMobile ? "inline" : "none";
+  }
+}
+
+function toggleMap() {
+  var panel = document.getElementById("map-panel");
+  var btn = document.getElementById("map-toggle");
+  var isOpen = panel.classList.toggle("map-open");
+  btn.textContent = isOpen
+    ? "[-] HIDE MAP"
+    : "[+] SHOW MAP (" + (document.getElementById("map-count").textContent) + ")";
+  if (isOpen && leafletMap) {
+    setTimeout(function() { leafletMap.invalidateSize(); }, 350);
+  }
+}
+
 function renderHumanityBar(stats) {
   if (!stats || !stats.checked) return '';
   var botColor = stats.botLikely > 0 ? '#ff3333' : 'var(--text-dim)';
@@ -1116,24 +1365,36 @@ function renderHumanityBar(stats) {
     '</span>';
 }
 
+var lastViewedPostId = null;
+
 async function showUser(username) {
+  // Quick check — don't navigate if not profiled
+  try {
+    var checkRes = await fetch("/api/users/" + encodeURIComponent(username));
+    if (!checkRes.ok) return; // silently ignore, user sees [pending] tooltip
+  } catch { return; }
+
+  if (isMobile) switchTab("analysis");
   var body = document.getElementById("detail-body");
-  body.innerHTML = '<div class="detail-empty" style="color:var(--green)">Loading u/' + username + '...</div>';
   document.getElementById("detail-id").textContent = 'u/' + username;
 
   try {
     var res = await fetch("/api/users/" + encodeURIComponent(username));
-    if (!res.ok) {
-      body.innerHTML = '<div class="detail-empty">User not profiled yet</div>';
-      return;
-    }
+    var backLink = lastViewedPostId
+      ? '<p style="margin-bottom:8px"><span style="cursor:pointer;color:var(--cyan);font-size:10px" onclick="showDetail(\'' + lastViewedPostId + '\')">&lt; back to post</span></p>'
+      : '';
+    if (!res.ok) return;
     var user = await res.json();
     var hColor = user.humanityScore >= 70 ? 'var(--green)' : user.humanityScore >= 40 ? 'var(--amber)' : 'var(--red)';
     var hLabel = user.humanityScore >= 70 ? 'HUMAN' : user.humanityScore >= 40 ? 'MIXED' : 'BOT-LIKE';
+    var backBtn = lastViewedPostId
+      ? '<span style="cursor:pointer;color:var(--cyan);font-size:10px" onclick="showDetail(\'' + lastViewedPostId + '\')">&lt; back to post</span>'
+      : '';
 
     body.innerHTML =
+      backBtn +
       '<div class="detail-section">' +
-        '<h3>> USER PROFILE: u/' + escapeHtml(username) + '</h3>' +
+        '<h3>> USER PROFILE: <a href="https://www.reddit.com/user/' + escapeHtml(username) + '" target="_blank" style="color:var(--cyan);text-decoration:none">u/' + escapeHtml(username) + '</a></h3>' +
         '<p style="margin:4px 0"><span style="color:' + hColor + ';font-weight:700;font-size:16px">' + user.humanityScore + '%</span> <span style="color:' + hColor + '">' + hLabel + '</span></p>' +
       '</div>' +
       '<div class="detail-section">' +

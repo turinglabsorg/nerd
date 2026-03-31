@@ -48,6 +48,10 @@ export function comments() {
   return db.collection("comments");
 }
 
+export function users() {
+  return db.collection("users");
+}
+
 export async function disconnect() {
   await client?.close();
 }

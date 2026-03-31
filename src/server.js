@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { posts, comments } from "./db.js";
+import { posts, comments, users } from "./db.js";
 import { getPostHumanityStats } from "./check-users.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +28,7 @@ export function startServer(port = 3666) {
 
   // API: stats
   app.get("/api/stats", async (req, res) => {
-    const usersCol = posts().s.db.collection("users");
+    const usersCol = users();
     const [totalPosts, totalEvaluated, totalComments, verdicts, subreddits, totalUsers, totalBots] = await Promise.all([
       posts().countDocuments(),
       posts().countDocuments({ evaluated: true }),
@@ -107,6 +107,23 @@ export function startServer(port = 3666) {
     });
   });
 
+  // API: search users
+  app.get("/api/users", async (req, res) => {
+    const q = req.query.q;
+    if (!q) return res.json([]);
+
+    try {
+      const docs = await users()
+        .find({ username: { $regex: q, $options: "i" } })
+        .sort({ humanityScore: 1 })
+        .limit(50)
+        .toArray();
+      res.json(docs);
+    } catch (e) {
+      res.json([]);
+    }
+  });
+
   // API: search posts
   app.get("/api/search", async (req, res) => {
     const q = req.query.q;
@@ -143,7 +160,7 @@ export function startServer(port = 3666) {
     const authorNames = [...new Set(postComments.map(c => c.author).filter(Boolean))];
     let userMap = {};
     try {
-      const userDocs = await posts().s.db.collection("users")
+      const userDocs = await users()
         .find({ username: { $in: authorNames } })
         .project({ username: 1, humanityScore: 1 })
         .toArray();
@@ -163,7 +180,7 @@ export function startServer(port = 3666) {
   // API: user profile
   app.get("/api/users/:username", async (req, res) => {
     try {
-      const user = await posts().s.db.collection("users")
+      const user = await users()
         .findOne({ username: req.params.username });
       if (!user) return res.status(404).json({ error: "not found" });
       res.json(user);

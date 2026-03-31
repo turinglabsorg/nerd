@@ -1,12 +1,7 @@
-import { posts, comments } from "./db.js";
+import { posts, comments, users } from "./db.js";
 import { config } from "./config.js";
 
 const UA = "nerd-agent/1.0";
-
-// Get the users collection
-function users() {
-  return posts().s.db.collection("users");
-}
 
 async function fetchRedditUser(username) {
   if (!username || username === "[deleted]" || username === "AutoModerator") return null;
