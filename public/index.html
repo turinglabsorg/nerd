@@ -1559,6 +1559,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") closeLightbox();
+  if (!lastViewedPostId || allPosts.length === 0) return;
+  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    var idx = allPosts.findIndex(function(p) { return p.redditId === lastViewedPostId; });
+    if (idx === -1) return;
+    var next = e.key === "ArrowRight" ? idx + 1 : idx - 1;
+    if (next >= 0 && next < allPosts.length) {
+      e.preventDefault();
+      showDetail(allPosts[next].redditId);
+    }
+  }
 });
 
 function fmtDate(d) {
