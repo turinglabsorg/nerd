@@ -1054,7 +1054,9 @@ function renderFindings() {
   const list = document.getElementById("findings-list");
   var filtered;
   if (currentFilter === "all") {
-    filtered = allPosts;
+    filtered = allPosts.filter(function(p) {
+      return !p.evaluation || p.evaluation.verdict !== "error";
+    });
   } else if (currentFilter === "removed") {
     filtered = allPosts.filter(function(p) {
       return p.removedStatus && p.removedStatus !== "active";

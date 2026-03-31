@@ -111,14 +111,16 @@ POST:
 TOP COMMENTS:
 ${commentBlock}
 
-Respond with a JSON object (no markdown fences):
+IMPORTANT: You MUST always respond with ONLY a JSON object, no matter how limited the data. Never refuse. If data is limited, use lower confidence. Work with what you have.
+
+Respond with a JSON object (no markdown fences, no explanation, ONLY JSON):
 {
   "verdict": "real" | "suspicious" | "likely_fake",
   "confidence": 0.0-1.0,
-  "admiraltyRating": "B2" (source letter + info number),
-  "cbcaScore": 0-19 (how many CBCA authenticity criteria are met),
+  "admiraltyRating": "F6" (source letter A-F + info number 1-6),
+  "cbcaScore": 0-19,
   "competingHypothesis": "most likely alternative explanation",
-  "reasoning": "2-3 sentence analysis citing specific framework evidence"
+  "reasoning": "2-3 sentence analysis"
 }`;
 
       console.log(`[evaluate] analyzing ${post.redditId}: "${post.title.slice(0, 60)}..."`);
@@ -130,6 +132,12 @@ Respond with a JSON object (no markdown fences):
         evaluation = typeof cleaned === "string" ? JSON.parse(cleaned) : cleaned;
       } catch {
         evaluation = { verdict: "error", confidence: 0, reasoning: raw };
+      }
+
+      // If error or 0 confidence, reschedule — don't mark as evaluated
+      if (evaluation.verdict === "error" || evaluation.confidence === 0) {
+        console.log(`[evaluate] ${post.redditId}: skipped (${evaluation.verdict}), will retry later`);
+        continue;
       }
 
       await posts().updateOne(
