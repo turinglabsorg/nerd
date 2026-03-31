@@ -21,7 +21,7 @@ src/
 ├── index.js            Main entry — cron scheduler + server startup
 ├── config.js           Env-based configuration
 ├── db.js               MongoDB connection (posts + comments collections)
-├── scrape-posts.js     Reddit JSON API scraper (public, no auth)
+├── scrape-posts.js     Reddit JSON API scraper (paginated, new/hot/top, no auth)
 ├── scrape-comments.js  Comment fetcher with re-fetch + re-eval flagging
 ├── evaluate.js         Claude Code CLI non-interactive evaluator
 ├── analyze-media.js    Image analysis via Anthropic Vision API (base64)

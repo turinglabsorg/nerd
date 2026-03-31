@@ -1049,6 +1049,9 @@ function renderFindings() {
     });
   }
 
+  // Sort by post date, most recent first
+  filtered.sort(function(a, b) { return (b.createdUtc || 0) - (a.createdUtc || 0); });
+
   document.getElementById("list-count").textContent = filtered.length + " entries";
 
   // Clear and rebuild
@@ -1065,7 +1068,7 @@ function renderFindings() {
     div.className = "finding";
     div.setAttribute("data-id", post.redditId);
 
-    var meta = "r/" + post.subreddit + " \u00b7 u/" + post.author + " \u00b7 " + post.score + "pts";
+    var meta = fmtDate(post.createdUtc) + " \u00b7 r/" + post.subreddit + " \u00b7 u/" + post.author + " \u00b7 " + post.score + "pts";
     if (post.geo && post.geo.query) meta += " \u00b7 " + post.geo.query;
     if (post.mediaAnalysis) meta += " [" + (post.mediaAnalysis.authenticity || "MEDIA") + "]";
     if (isMedia(post.url)) meta += " [IMG/VID]";
@@ -1123,6 +1126,7 @@ async function showDetail(redditId) {
     <div class="detail-section" style="margin-bottom:6px">
       <p style="color:var(--green);font-weight:700;margin-bottom:2px">${escapeHtml(post.title)}</p>
       <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | ${opEl} | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
+      <p style="color:var(--text-dim);font-size:9px;margin:1px 0 0 0">posted ${fmtDate(post.createdUtc)} | scraped ${fmtDate(post.insertedAt)}${post.evaluatedAt ? ' | analyzed ' + fmtDate(post.evaluatedAt) : ''}</p>
       ${post.humanityStats && post.humanityStats.checked > 0 ? '<p style="font-size:10px;margin:2px 0 0 0">' + renderHumanityBar(post.humanityStats) + '</p>' : ''}
     </div>
 
@@ -1445,6 +1449,17 @@ document.addEventListener("DOMContentLoaded", function() {
 document.addEventListener("keydown", function(e) {
   if (e.key === "Escape") closeLightbox();
 });
+
+function fmtDate(d) {
+  if (!d) return '-';
+  var dt = typeof d === 'number' ? new Date(d * 1000) : new Date(d);
+  if (isNaN(dt)) return '-';
+  var dd = dt.getDate().toString().padStart(2,'0');
+  var mm = (dt.getMonth()+1).toString().padStart(2,'0');
+  var hh = dt.getHours().toString().padStart(2,'0');
+  var mi = dt.getMinutes().toString().padStart(2,'0');
+  return dd + '/' + mm + ' ' + hh + ':' + mi;
+}
 
 function escapeHtml(text) {
   if (!text) return '';
