@@ -63,6 +63,44 @@ export function startServer(port = 3666) {
     res.json(docs);
   });
 
+  // API: removed/censored posts
+  app.get("/api/removals", async (req, res) => {
+    const docs = await posts()
+      .find({
+        removedStatus: { $exists: true, $nin: ["active", null] },
+      })
+      .sort({ removedAt: -1 })
+      .limit(200)
+      .toArray();
+
+    res.json(docs);
+  });
+
+  // API: censorship stats
+  app.get("/api/stats/removals", async (req, res) => {
+    const [total, byStatus, censorshipCandidates] = await Promise.all([
+      posts().countDocuments({
+        removedStatus: { $exists: true, $nin: ["active", null] },
+      }),
+      posts().aggregate([
+        { $match: { removedStatus: { $exists: true, $nin: ["active", null] } } },
+        { $group: { _id: "$removedStatus", count: { $sum: 1 } } },
+      ]).toArray(),
+      // Posts rated "real" that were removed by moderators
+      posts().countDocuments({
+        removedStatus: { $regex: /^removed/ },
+        "evaluation.verdict": "real",
+        "evaluation.confidence": { $gte: 0.6 },
+      }),
+    ]);
+
+    res.json({
+      totalRemoved: total,
+      byStatus: Object.fromEntries(byStatus.map((s) => [s._id, s.count])),
+      censorshipCandidates,
+    });
+  });
+
   // API: search posts
   app.get("/api/search", async (req, res) => {
     const q = req.query.q;

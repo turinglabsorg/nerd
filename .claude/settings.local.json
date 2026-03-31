@@ -34,7 +34,9 @@
       "Bash(gcloud projects:*)",
       "WebSearch",
       "WebFetch(domain:docs.cloud.google.com)",
-      "Bash(gcloud firestore:*)"
+      "Bash(gcloud firestore:*)",
+      "Bash(gcloud builds:*)",
+      "Bash(gcloud run:*)"
     ]
   }
 }

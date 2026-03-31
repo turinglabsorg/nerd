@@ -6,6 +6,7 @@ import { scrapeComments } from "./scrape-comments.js";
 import { evaluatePosts } from "./evaluate.js";
 import { geocodePosts } from "./geocode.js";
 import { analyzeMedia } from "./analyze-media.js";
+import { checkRemovals } from "./check-removals.js";
 import { startServer } from "./server.js";
 
 const MODE = process.env.NERD_MODE || "all"; // "all", "scraper", "web"
@@ -64,6 +65,12 @@ async function main() {
   // Cron: geocode posts (every 2 minutes)
   cron.schedule("*/2 * * * *", async () => {
     await geocodePosts();
+  });
+
+  // Cron: check for removed/deleted posts (every 10 minutes)
+  cron.schedule("*/10 * * * *", async () => {
+    console.log("\n[cron] checking removals...");
+    await checkRemovals();
   });
 
   // Cron: analyze media (every 3 minutes)

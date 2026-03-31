@@ -476,6 +476,39 @@
     );
   }
 
+  /* === REMOVALS === */
+  .verdict-removed\:moderator, .verdict-removed\:reddit,
+  .verdict-deleted, .verdict-deleted\:author {
+    color: #ff3333; border-color: #3d0000; background: rgba(255,51,51,0.08);
+    text-decoration: line-through;
+  }
+
+  .removal-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #ff3333;
+    border: 1px solid #3d0000;
+    background: rgba(255,51,51,0.08);
+    margin-left: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .censorship-alert {
+    background: rgba(255,51,51,0.05);
+    border: 1px solid #3d0000;
+    padding: 2px 6px;
+    font-size: 9px;
+    color: #ff3333;
+    animation: blink-alert 2s ease-in-out infinite;
+  }
+
+  @keyframes blink-alert {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
   /* === BOOT ANIMATION === */
   #boot-screen {
     position: fixed;
@@ -511,6 +544,8 @@
       <div>EVALUATED <span class="val" id="stat-eval">-</span></div>
       <div>COMMENTS <span class="val" id="stat-comments">-</span></div>
       <div>PENDING <span class="val" id="stat-pending">-</span></div>
+      <div>REMOVED <span class="val" style="color:#ff3333" id="stat-removed">-</span></div>
+      <div id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP: <span id="stat-censorship-count">0</span></span></div>
     </div>
   </div>
 
@@ -547,6 +582,7 @@
         <button class="filter-btn" data-filter="real">REAL</button>
         <button class="filter-btn" data-filter="suspicious">SUS</button>
         <button class="filter-btn" data-filter="likely_fake">FAKE</button>
+        <button class="filter-btn" data-filter="removed" style="color:#ff3333;border-color:#3d0000">REMOVED</button>
         <span style="flex:1"></span>
         <button class="filter-btn active" id="btn-auto" onclick="toggleAuto()">AUTO</button>
         <select id="auto-interval" onchange="setAutoInterval()" style="
@@ -721,20 +757,38 @@ function renderMarkers() {
 }
 
 async function loadStats() {
-  const res = await fetch("/api/stats");
-  const stats = await res.json();
-  document.getElementById("stat-posts").textContent = stats.totalPosts;
-  document.getElementById("stat-eval").textContent = stats.totalEvaluated;
-  document.getElementById("stat-comments").textContent = stats.totalComments;
-  document.getElementById("stat-pending").textContent = stats.pendingEval;
+  try {
+    const [statsRes, remRes] = await Promise.all([
+      fetch("/api/stats"),
+      fetch("/api/stats/removals"),
+    ]);
+    const stats = await statsRes.json();
+    const rem = await remRes.json();
+    document.getElementById("stat-posts").textContent = stats.totalPosts;
+    document.getElementById("stat-eval").textContent = stats.totalEvaluated;
+    document.getElementById("stat-comments").textContent = stats.totalComments;
+    document.getElementById("stat-pending").textContent = stats.pendingEval;
+    document.getElementById("stat-removed").textContent = rem.totalRemoved || 0;
+    if (rem.censorshipCandidates > 0) {
+      document.getElementById("stat-censorship").style.display = "";
+      document.getElementById("stat-censorship-count").textContent = rem.censorshipCandidates;
+    }
+  } catch(e) { console.error("loadStats error:", e); }
 }
 
 async function loadPosts() {
   try {
-    const res = await fetch("/api/posts?evaluated=true&limit=500");
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      allPosts = data;
+    const [evalRes, remRes] = await Promise.all([
+      fetch("/api/posts?evaluated=true&limit=500"),
+      fetch("/api/removals"),
+    ]);
+    const evalData = await evalRes.json();
+    const remData = await remRes.json();
+    if (Array.isArray(evalData)) {
+      // Merge: add removed posts that aren't already in evalData
+      var ids = new Set(evalData.map(function(p) { return p.redditId; }));
+      var extra = (remData || []).filter(function(p) { return !ids.has(p.redditId); });
+      allPosts = evalData.concat(extra);
       renderFindings();
     }
   } catch(e) { console.error("loadPosts error:", e); }
@@ -753,9 +807,18 @@ async function loadGeo() {
 
 function renderFindings() {
   const list = document.getElementById("findings-list");
-  const filtered = currentFilter === "all"
-    ? allPosts
-    : allPosts.filter(p => p.evaluation?.verdict === currentFilter);
+  var filtered;
+  if (currentFilter === "all") {
+    filtered = allPosts;
+  } else if (currentFilter === "removed") {
+    filtered = allPosts.filter(function(p) {
+      return p.removedStatus && p.removedStatus !== "active";
+    });
+  } else {
+    filtered = allPosts.filter(function(p) {
+      return p.evaluation && p.evaluation.verdict === currentFilter;
+    });
+  }
 
   document.getElementById("list-count").textContent = filtered.length + " entries";
 
@@ -778,9 +841,19 @@ function renderFindings() {
     if (post.mediaAnalysis) meta += " [" + (post.mediaAnalysis.authenticity || "MEDIA") + "]";
     if (isMedia(post.url)) meta += " [IMG/VID]";
 
+    var removedHtml = "";
+    if (post.removedStatus && post.removedStatus !== "active") {
+      var isRealRemoved = verdict === "real" && conf >= 0.6;
+      removedHtml = '<span class="removal-badge">' + post.removedStatus.toUpperCase() + '</span>';
+      if (isRealRemoved) {
+        removedHtml += ' <span class="censorship-alert">POSSIBLE CENSORSHIP</span>';
+      }
+    }
+
     div.innerHTML =
       '<div class="finding-header">' +
         '<span class="verdict-badge verdict-' + verdict + '">' + verdict.toUpperCase() + '</span>' +
+        removedHtml +
         '<span>' + (conf * 100).toFixed(0) + '%' +
           '<span class="confidence-bar">' +
             '<span class="confidence-bar-inner" style="width:' + (conf * 100) + '%;background:' + barColor + '"></span>' +
@@ -817,7 +890,7 @@ async function showDetail(redditId) {
     </div>
 
     <div class="detail-section" style="margin-bottom:8px">
-      <p style="margin:0"><span class="verdict-badge ${verdictClass}">${(e.verdict || 'N/A').toUpperCase()}</span> Confidence: ${((e.confidence || 0) * 100).toFixed(0)}%</p>
+      <p style="margin:0"><span class="verdict-badge ${verdictClass}">${(e.verdict || 'N/A').toUpperCase()}</span> Confidence: ${((e.confidence || 0) * 100).toFixed(0)}%${post.removedStatus && post.removedStatus !== 'active' ? ' <span class="removal-badge">' + post.removedStatus.toUpperCase() + '</span>' : ''}${post.removedStatus && post.removedStatus !== 'active' && e.verdict === 'real' && e.confidence >= 0.6 ? ' <span class="censorship-alert">POSSIBLE CENSORSHIP</span>' : ''}</p>
     </div>
 
     <div class="detail-section">
