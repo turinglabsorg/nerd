@@ -1123,7 +1123,12 @@ function renderFindings() {
 async function showDetail(redditId) {
   lastViewedPostId = redditId;
   highlightMarker(redditId);
-  if (isMobile) switchTab("analysis");
+  if (isMobile) {
+    document.getElementById("map-panel").classList.remove("map-open");
+    var btn = document.getElementById("map-toggle");
+    if (btn) btn.textContent = "[+] SHOW MAP (" + (document.getElementById("map-count").textContent) + ")";
+    switchTab("analysis");
+  }
   const body = document.getElementById("detail-body");
   body.innerHTML = `<div class="detail-empty" style="color:var(--green)">Loading ${redditId}...</div>`;
   document.getElementById("detail-id").textContent = redditId;
