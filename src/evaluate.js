@@ -40,11 +40,13 @@ async function callOpenAI(baseUrl, apiKey, model, prompt) {
 
 async function runLLM(prompt) {
   try {
-    return await callOpenAI(config.llmBaseUrl, config.llmApiKey, config.llmModel, prompt);
+    const content = await callOpenAI(config.llmBaseUrl, config.llmApiKey, config.llmModel, prompt);
+    return { content, model: config.llmModel };
   } catch (err) {
     if (!config.llmFallbackBaseUrl) throw err;
     console.warn(`[evaluate] primary LLM failed (${err.message}), falling back to ${config.llmFallbackModel}`);
-    return await callOpenAI(config.llmFallbackBaseUrl, config.llmFallbackApiKey, config.llmFallbackModel, prompt);
+    const content = await callOpenAI(config.llmFallbackBaseUrl, config.llmFallbackApiKey, config.llmFallbackModel, prompt);
+    return { content, model: config.llmFallbackModel };
   }
 }
 
@@ -131,7 +133,7 @@ Respond with a JSON object (no markdown fences, no explanation, ONLY JSON):
 }`;
 
       console.log(`[evaluate] analyzing ${post.redditId}: "${post.title.slice(0, 60)}..."`);
-      const raw = await runLLM(prompt);
+      const { content: raw, model: usedModel } = await runLLM(prompt);
 
       let evaluation;
       try {
@@ -149,7 +151,7 @@ Respond with a JSON object (no markdown fences, no explanation, ONLY JSON):
 
       await posts().updateOne(
         { _id: post._id },
-        { $set: { evaluated: true, evaluation, evaluatedAt: new Date(), needsReeval: false } }
+        { $set: { evaluated: true, evaluation, evaluatedAt: new Date(), evaluatedBy: usedModel, needsReeval: false } }
       );
 
       console.log(`[evaluate] ${post.redditId}: ${evaluation.verdict} (${evaluation.confidence})`);
