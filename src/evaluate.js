@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { posts, comments } from "./db.js";
 import { config } from "./config.js";
 import { sendTelegram, formatEvaluation } from "./telegram.js";
@@ -12,33 +11,41 @@ function extractJson(text) {
   return match ? match[0] : text;
 }
 
-function runClaude(prompt) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      config.claudeBin,
-      ["-p", "-", "--output-format", "json", "--model", "claude-haiku-4-5-20251001"],
-      { timeout: 120_000, stdio: ["pipe", "pipe", "pipe"] }
-    );
+const SYSTEM_MSG = "You are an intelligence analyst. Always respond with valid JSON only, no markdown fences or explanation.";
 
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-
-    child.on("close", (code) => {
-      if (code !== 0) return reject(new Error(stderr || `exit code ${code}`));
-      try {
-        const parsed = JSON.parse(stdout);
-        resolve(parsed.result || stdout);
-      } catch {
-        resolve(stdout.trim());
-      }
-    });
-
-    child.on("error", reject);
-    child.stdin.write(prompt);
-    child.stdin.end();
+async function callOpenAI(baseUrl, apiKey, model, prompt) {
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: SYSTEM_MSG },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.6,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(120_000),
   });
+  if (!res.ok) throw new Error(`${baseUrl} ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  const msg = data.choices?.[0]?.message;
+  return msg?.content || msg?.reasoning || JSON.stringify(data);
+}
+
+async function runLLM(prompt) {
+  try {
+    return await callOpenAI(config.llmBaseUrl, config.llmApiKey, config.llmModel, prompt);
+  } catch (err) {
+    if (!config.llmFallbackBaseUrl) throw err;
+    console.warn(`[evaluate] primary LLM failed (${err.message}), falling back to ${config.llmFallbackModel}`);
+    return await callOpenAI(config.llmFallbackBaseUrl, config.llmFallbackApiKey, config.llmFallbackModel, prompt);
+  }
 }
 
 export async function evaluatePosts() {
@@ -124,7 +131,7 @@ Respond with a JSON object (no markdown fences, no explanation, ONLY JSON):
 }`;
 
       console.log(`[evaluate] analyzing ${post.redditId}: "${post.title.slice(0, 60)}..."`);
-      const raw = await runClaude(prompt);
+      const raw = await runLLM(prompt);
 
       let evaluation;
       try {

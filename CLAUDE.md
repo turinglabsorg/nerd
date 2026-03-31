@@ -75,7 +75,7 @@ docker compose up -d   # first time: docker exec -it nerd-nerd-1 claude then /lo
 
 ## Key Details
 
-- Text evaluation uses `claude -p` CLI (free with login, Haiku model)
+- Text evaluation uses Ollama Cloud API (qwen3.5 model via OLLAMA_BASE_URL)
 - Media/image analysis uses Anthropic API directly (needs ANTHROPIC_API_KEY)
 - v.redd.it videos blocked by Reddit (403), only images analyzed currently
 - Posts get `needsReeval: true` when new comments arrive
