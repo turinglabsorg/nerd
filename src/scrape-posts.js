@@ -3,19 +3,37 @@ import { posts } from "./db.js";
 
 const UA = "nerd-agent/1.0";
 
-async function fetchSubreddit(subreddit) {
-  const url = `https://www.reddit.com/r/${subreddit}/new.json?limit=${config.postsLimit}`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA },
-  });
+const MAX_PAGES = parseInt(process.env.SCRAPE_PAGES || "4", 10);
 
-  if (!res.ok) {
-    console.error(`[posts] r/${subreddit} HTTP ${res.status}`);
-    return [];
+async function fetchSubreddit(subreddit, sort = "new") {
+  let allItems = [];
+  let after = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const extra = sort === "top" ? "&t=week" : "";
+    const params = `limit=${config.postsLimit}${after ? `&after=${after}` : ""}${extra}`;
+    const url = `https://www.reddit.com/r/${subreddit}/${sort}.json?${params}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+    });
+
+    if (!res.ok) {
+      console.error(`[posts] r/${subreddit} HTTP ${res.status}`);
+      break;
+    }
+
+    const json = await res.json();
+    const items = json.data.children.map((c) => c.data);
+    allItems.push(...items);
+
+    after = json.data.after;
+    if (!after) break; // no more pages
+
+    // Be nice to Reddit
+    await new Promise((r) => setTimeout(r, 2000));
   }
 
-  const json = await res.json();
-  return json.data.children.map((c) => c.data);
+  return allItems;
 }
 
 function matchesKeywords(title) {
@@ -27,9 +45,16 @@ function matchesKeywords(title) {
 export async function scrapePosts() {
   let saved = 0;
 
+  const sorts = ["new", "hot", "top"];
+
   for (const sub of config.subreddits) {
     try {
-      const items = await fetchSubreddit(sub);
+      let items = [];
+      for (const sort of sorts) {
+        const sortItems = await fetchSubreddit(sub, sort);
+        items.push(...sortItems);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
 
       for (const item of items) {
         if (!matchesKeywords(item.title)) continue;
