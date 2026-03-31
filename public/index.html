@@ -552,6 +552,8 @@
       <div>EVALUATED <span class="val" id="stat-eval">-</span></div>
       <div>COMMENTS <span class="val" id="stat-comments">-</span></div>
       <div>PENDING <span class="val" id="stat-pending">-</span></div>
+      <div>USERS <span class="val" id="stat-users">-</span></div>
+      <div>BOTS <span class="val" style="color:#ff3333" id="stat-bots">-</span></div>
       <div>REMOVED <span class="val" style="color:#ff3333" id="stat-removed">-</span></div>
       <div id="stat-censorship" style="display:none"><span class="censorship-alert">CENSORSHIP: <span id="stat-censorship-count">0</span></span></div>
     </div>
@@ -776,6 +778,8 @@ async function loadStats() {
     document.getElementById("stat-eval").textContent = stats.totalEvaluated;
     document.getElementById("stat-comments").textContent = stats.totalComments;
     document.getElementById("stat-pending").textContent = stats.pendingEval;
+    document.getElementById("stat-users").textContent = stats.totalUsers || 0;
+    document.getElementById("stat-bots").textContent = stats.totalBots || 0;
     document.getElementById("stat-removed").textContent = rem.totalRemoved || 0;
     if (rem.censorshipCandidates > 0) {
       document.getElementById("stat-censorship").style.display = "";
@@ -890,7 +894,8 @@ async function showDetail(redditId) {
   body.innerHTML = `
     <div class="detail-section" style="margin-bottom:6px">
       <p style="color:var(--green);font-weight:700;margin-bottom:2px">${escapeHtml(post.title)}</p>
-      <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | u/${post.author} | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
+      <p style="color:var(--text-dim);font-size:10px;margin:0">r/${post.subreddit} | <span style="cursor:pointer;color:var(--cyan)" onclick="showUser('${escapeHtml(post.author)}')">u/${post.author}</span> | ${post.score}pts | ${post.numComments} comments${post.geo?.query ? ` | ${post.geo.query}` : ''} | <a href="${post.permalink}" target="_blank" style="color:var(--cyan);text-decoration:none">[open on reddit]</a></p>
+      ${post.humanityStats && post.humanityStats.checked > 0 ? '<p style="font-size:10px;margin:2px 0 0 0">' + renderHumanityBar(post.humanityStats) + '</p>' : ''}
     </div>
 
     <div class="detail-section" style="margin-bottom:8px">

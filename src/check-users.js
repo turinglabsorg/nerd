@@ -210,7 +210,7 @@ export async function checkUsers() {
 
   let checked = 0;
 
-  for (const username of toCheck.slice(0, 10)) {
+  for (const username of toCheck.slice(0, 30)) {
     // Fetch Reddit profile
     const redditUser = await fetchRedditUser(username);
 

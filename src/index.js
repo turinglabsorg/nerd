@@ -74,8 +74,8 @@ async function main() {
     await checkRemovals();
   });
 
-  // Cron: check user humanity (every 5 minutes)
-  cron.schedule("*/5 * * * *", async () => {
+  // Cron: check user humanity (every 2 minutes)
+  cron.schedule("*/2 * * * *", async () => {
     await checkUsers();
   });
 

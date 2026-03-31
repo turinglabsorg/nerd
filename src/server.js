@@ -28,7 +28,8 @@ export function startServer(port = 3666) {
 
   // API: stats
   app.get("/api/stats", async (req, res) => {
-    const [totalPosts, totalEvaluated, totalComments, verdicts, subreddits] = await Promise.all([
+    const usersCol = posts().s.db.collection("users");
+    const [totalPosts, totalEvaluated, totalComments, verdicts, subreddits, totalUsers, totalBots] = await Promise.all([
       posts().countDocuments(),
       posts().countDocuments({ evaluated: true }),
       comments().countDocuments(),
@@ -39,6 +40,8 @@ export function startServer(port = 3666) {
       posts().aggregate([
         { $group: { _id: "$subreddit", count: { $sum: 1 } } },
       ]).toArray(),
+      usersCol.countDocuments().catch(() => 0),
+      usersCol.countDocuments({ humanityScore: { $lt: 40 } }).catch(() => 0),
     ]);
 
     res.json({
@@ -46,6 +49,8 @@ export function startServer(port = 3666) {
       totalEvaluated,
       pendingEval: totalPosts - totalEvaluated,
       totalComments,
+      totalUsers,
+      totalBots,
       verdicts: Object.fromEntries(verdicts.map((v) => [v._id, v.count])),
       subreddits: Object.fromEntries(subreddits.map((s) => [s._id, s.count])),
     });
