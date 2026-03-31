@@ -69,13 +69,15 @@ public/
 ## Running
 
 ```bash
-cp .env.example .env   # configure MONGODB_URI, SUBREDDITS, TELEGRAM_*, ANTHROPIC_API_KEY
-docker compose up -d   # first time: docker exec -it nerd-nerd-1 claude then /login
+cp .env.example .env   # configure MONGODB_URI, SUBREDDITS, LLM_*, TELEGRAM_*
+docker compose up -d
 ```
 
 ## Key Details
 
-- Text evaluation uses Ollama Cloud API (qwen3.5 model via OLLAMA_BASE_URL)
+- Text evaluation uses OpenAI-compatible LLM APIs (primary: NVIDIA Nemotron 3 Super, fallback: Ollama Cloud Qwen 3.5)
+- Config: `LLM_BASE_URL/KEY/MODEL` (primary) + `LLM_FALLBACK_BASE_URL/KEY/MODEL` (fallback)
+- `evaluatedBy` field on posts tracks which model was used for each evaluation
 - Media/image analysis uses Anthropic API directly (needs ANTHROPIC_API_KEY)
 - v.redd.it videos blocked by Reddit (403), only images analyzed currently
 - Posts get `needsReeval: true` when new comments arrive
@@ -84,4 +86,5 @@ docker compose up -d   # first time: docker exec -it nerd-nerd-1 claude then /lo
 - Censorship detection: alerts when posts rated "real" (confidence >= 0.6) are removed
 - User humanity scoring: account age, karma ratio, vocab diversity, comment timing, duplicate detection
 - Evaluation uses intelligence frameworks: Admiralty Code, CBCA, ACH, deception indicators
-- New eval fields: `admiraltyRating`, `cbcaScore`, `competingHypothesis`
+- Eval fields: `admiraltyRating`, `cbcaScore`, `competingHypothesis`, `evaluatedBy`
+- Benchmark script: `node scripts/benchmark.js` tests multiple LLM providers
