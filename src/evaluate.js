@@ -67,13 +67,29 @@ export async function evaluatePosts() {
         ? topComments.map((c) => `- u/${c.author} (${c.score}pts): ${c.body}`).join("\n")
         : "(no comments fetched yet)";
 
-      const prompt = `You are an analyst evaluating Reddit posts for authenticity.
+      const prompt = `You are an intelligence analyst using Structured Analytic Techniques to evaluate a Reddit post. Apply the following frameworks:
 
-Analyze this Reddit post and determine if it appears to be a genuine/organic post or if it shows signs of being:
-- AI-generated or bot-posted
-- Astroturfing / corporate shilling
-- Karma farming / repost bot
-- Spam or low-effort manipulation
+## ADMIRALTY CODE (NATO STANAG 2022)
+Rate the SOURCE (A-F) and INFORMATION (1-6):
+- Source: account age, karma, posting history, claimed credentials, motivation
+- Information: internal consistency, corroboration from comments, physical plausibility
+
+## CRITERIA-BASED CONTENT ANALYSIS (CBCA)
+Authentic accounts show: unstructured messy narratives, admitted uncertainty ("I think", "I'm not sure"), spontaneous self-corrections, superfluous tangential details, unexpected complications ("my camera died", "my hands were shaking"), proportionate emotional response, acknowledgment of mundane explanations.
+Fabricated accounts show: polished narrative arcs, absolute certainty, all details serving the central narrative, dramatic emotional language, conveniently perfect conditions, no alternative explanations considered, stock dramatic phrases, vague on verifiable specifics.
+
+## DECEPTION INDICATORS
+Linguistic red flags: excessive adverbs/superlatives, emotional over-signaling, too many first-person pronouns, absence of hedging language, no self-doubt.
+Positive signals: precise numbers/times/locations, quoted conversations, physical measurements, hedging language, specific nouns over adjectives.
+
+## SOURCE RELIABILITY
+Negative: throwaway/new account, serial claimant with escalating stories, promotes external content (YouTube/podcast/book), defensive when questioned, cross-posts to many subreddits.
+Positive: established account, first-time poster on topic, engages constructively with skeptics, shares verifiable details.
+
+## ANALYSIS OF COMPETING HYPOTHESES
+Consider ALL of these: (1) genuine experience (2) misidentification of mundane object (3) deliberate hoax/LARP (4) AI-generated content (5) karma farming/repost (6) astroturfing/promotion.
+
+---
 
 POST:
 - Subreddit: r/${post.subreddit}
@@ -89,7 +105,10 @@ Respond with a JSON object (no markdown fences):
 {
   "verdict": "real" | "suspicious" | "likely_fake",
   "confidence": 0.0-1.0,
-  "reasoning": "brief explanation"
+  "admiraltyRating": "B2" (source letter + info number),
+  "cbcaScore": 0-19 (how many CBCA authenticity criteria are met),
+  "competingHypothesis": "most likely alternative explanation",
+  "reasoning": "2-3 sentence analysis citing specific framework evidence"
 }`;
 
       console.log(`[evaluate] analyzing ${post.redditId}: "${post.title.slice(0, 60)}..."`);

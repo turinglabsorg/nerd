@@ -899,6 +899,7 @@ async function showDetail(redditId) {
 
     <div class="detail-section">
       <h3>> ANALYSIS</h3>
+      ${e.admiraltyRating ? '<p style="margin-bottom:4px"><span style="color:var(--cyan)">Admiralty:</span> ' + escapeHtml(e.admiraltyRating) + ' <span style="color:var(--text-dim)">|</span> <span style="color:var(--cyan)">CBCA:</span> ' + (e.cbcaScore || '?') + '/19' + (e.competingHypothesis ? ' <span style="color:var(--text-dim)">|</span> <span style="color:var(--cyan)">Alt:</span> ' + escapeHtml(e.competingHypothesis) : '') + '</p>' : ''}
       <pre>${escapeHtml(e.reasoning || 'No analysis available')}</pre>
     </div>
 
