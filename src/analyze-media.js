@@ -95,22 +95,19 @@ async function extractFrames(videoPath, tmpDir) {
   }
 }
 
-async function analyzeWithClaude(imagePaths, post) {
+async function analyzeWithVision(imagePaths, post) {
   const mediaType = imagePaths.length > 1 ? "video frames" : "image";
 
-  // Build image content blocks as base64
+  // Build image content blocks as base64 (OpenAI-compatible format)
   const imageBlocks = [];
   for (const imgPath of imagePaths) {
     const data = await readFile(imgPath);
     const ext = path.extname(imgPath).slice(1).toLowerCase();
-    const mediaTypeMap = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
+    const mimeMap = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
+    const mimeType = mimeMap[ext] || "image/jpeg";
     imageBlocks.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: mediaTypeMap[ext] || "image/jpeg",
-        data: data.toString("base64"),
-      },
+      type: "image_url",
+      image_url: { url: `data:${mimeType};base64,${data.toString("base64")}` },
     });
   }
 
@@ -135,30 +132,30 @@ Respond with a JSON object (no markdown fences):
   "reasoning": "brief explanation"
 }`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(`${config.visionBaseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": config.anthropicKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${config.visionApiKey}`,
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
+      model: config.visionModel,
       messages: [{
         role: "user",
         content: [...imageBlocks, { type: "text", text: textPrompt }],
       }],
+      temperature: 0.4,
     }),
+    signal: AbortSignal.timeout(180_000),
   });
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Anthropic API ${res.status}: ${err}`);
+    throw new Error(`Vision API ${res.status}: ${err}`);
   }
 
   const json = await res.json();
-  return json.content?.[0]?.text || "";
+  return json.choices?.[0]?.message?.content || "";
 }
 
 function extractJson(text) {
@@ -169,7 +166,7 @@ function extractJson(text) {
 }
 
 export async function analyzeMedia() {
-  if (!config.anthropicKey) {
+  if (!config.visionBaseUrl || !config.visionApiKey) {
     return 0;
   }
   // Prioritize images (reliable download), then videos
@@ -215,8 +212,8 @@ export async function analyzeMedia() {
         continue;
       }
 
-      console.log(`[media] analyzing ${post.redditId} with Claude vision...`);
-      const raw = await analyzeWithClaude(imagePaths, post);
+      console.log(`[media] analyzing ${post.redditId} with ${config.visionModel}...`);
+      const raw = await analyzeWithVision(imagePaths, post);
 
       let analysis;
       try {

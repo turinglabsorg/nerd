@@ -16,7 +16,7 @@
 
 > *"The truth is out there... but is it on Reddit?"*
 
-NERD is an autonomous agent that scrapes Reddit subreddits, collects every post and comment, and uses intelligence analysis frameworks to evaluate whether each post is **real**, **suspicious**, or **likely fake**. It profiles users for bot detection, tracks removed posts for censorship patterns, and analyzes images with Claude Vision.
+NERD is an autonomous agent that scrapes Reddit subreddits, collects every post and comment, and uses intelligence analysis frameworks to evaluate whether each post is **real**, **suspicious**, or **likely fake**. It profiles users for bot detection, tracks removed posts for censorship patterns, and analyzes images with vision LLMs.
 
 ## What it does
 
@@ -27,7 +27,7 @@ NERD is an autonomous agent that scrapes Reddit subreddits, collects every post 
 - Profiles Reddit users for bot detection (humanity score 0-100%)
 - Tracks post removals and flags potential censorship
 - Geocodes locations mentioned in posts and plots them on a live map
-- Analyzes images with Anthropic Vision API
+- Analyzes images with vision LLMs (Qwen3-VL via Ollama Cloud)
 - Sends Telegram notifications for each finding
 - Serves a terminal-style dark web UI with Leaflet map, search, filters, and lightbox
 
@@ -68,30 +68,52 @@ Both connect to **Firestore Enterprise** (MongoDB-compatible) as the shared data
 
 Post evaluation uses OpenAI-compatible LLM APIs with automatic fallback. The system is provider-agnostic — any OpenAI-compatible endpoint works.
 
-**Current setup:** NVIDIA Nemotron 3 Super (primary) → Ollama Cloud Qwen 3.5 (fallback)
+**Current setup:**
+- **Text eval:** Ollama Cloud Qwen 3.5 397B (primary) → NVIDIA Nemotron Super 49B (fallback)
+- **Media analysis:** Ollama Cloud Qwen3-VL 235B Instruct
 
-### Model Benchmark (2026-03-31)
+### Text Evaluation Benchmark (2026-04-01)
 
-Tested on the same Reddit post with identical prompts. Evaluated: JSON validity, schema compliance, response time, and analysis quality.
+Tested on r/AliensRHere post "Peru UFO sighting" (380 upvotes, 10 comments, link post). Evaluated: JSON validity, schema compliance, response time, and analysis quality.
 
 | Model | Time | Tok Out | JSON | Schema | Verdict | Conf | Admiralty | CBCA |
 |-------|------|---------|------|--------|---------|------|----------|------|
-| **NVIDIA Nemotron 3 Super 120B** | 5.90s | 186 | Y | 0 issues | suspicious | 0.65 | D4 | 7 |
-| NVIDIA Llama 3.3 Nemotron Super 49B | 2.80s | 96 | Y | 0 issues | suspicious | 0.40 | D3 | 8 |
-| NVIDIA Llama 3.1 Nemotron Ultra 253B | 2.40s | 96 | Y | 6 issues | - | - | - | - |
-| DeepSeek R1 Distill Qwen 32B | 16.30s | 516 | Y | 0 issues | likely_fake | 0.65 | F3 | 5 |
-| Llama 3.1 8B Instruct | 0.48s | - | ERROR | - | - | - | - | - |
-| Ollama Cloud Qwen 3.5 | 48.42s | 2917 | Y | 0 issues | likely_fake | 0.85 | F5 | 3 |
+| Ollama DeepSeek V3.2 | 55.35s | 2572 | Y | 0 issues | likely_fake | 0.60 | F6 | 7 |
+| **Ollama Qwen 3.5 397B** | 43.25s | 3446 | Y | 0 issues | likely_fake | 0.70 | E5 | 3 |
+| Ollama Mistral Large 3 675B | 23.54s | 206 | Y | 0 issues | suspicious | 0.60 | D4 | 8 |
+| Ollama Cogito 2.1 671B | 4.61s | 129 | Y | 0 issues | suspicious | 0.65 | F6 | 6 |
+| Ollama Kimi K2 1T | 5.26s | 91 | Y | 0 issues | suspicious | 0.45 | F5 | 7 |
+| Ollama Qwen 3.5 (default) | 32.74s | 2373 | Y | 0 issues | likely_fake | 0.85 | F3 | 5 |
+| NVIDIA Nemotron Super 49B | 4.96s | 140 | N | 1 issue | likely_fake | 0.70 | D3 | 8 |
+| NVIDIA Nemotron Ultra 253B | 7.49s | 114 | Y | 6 issues | - | - | - | - |
 
 **Findings:**
-- **Nemotron 3 Super 120B** — Best balance of speed (6s), JSON compliance, and balanced analysis. Selected as primary.
-- **Llama 3.3 Nemotron Super 49B** — Fastest (2.8s) with valid output, but lower confidence and shorter reasoning.
-- **Nemotron Ultra 253B** — Fast but broken JSON schema output (6 validation errors). Not usable.
-- **DeepSeek R1 Distill Qwen 32B** — Good analysis quality but slow (16s) due to reasoning overhead.
-- **Llama 3.1 8B** — Doesn't support `chat_template_kwargs`, fails on the API call.
-- **Qwen 3.5 (Ollama)** — Most aggressive classifier (0.85 confidence) but very slow (48s) and verbose (2917 tokens out). Good as fallback.
+- **Qwen 3.5 397B** — Best reasoning quality: caught TikTok repost and geographic inconsistencies between title and comments. Selected as primary.
+- **Mistral Large 3 675B** — Good nuance distinguishing comment quality with CBCA, faster (24s).
+- **Cogito 2.1 671B** — Fastest Ollama model (4.6s), solid analysis.
+- **Kimi K2 1T** — Fast (5.3s) despite 1T parameters, concise but lower confidence.
+- **DeepSeek V3.2** — Good analysis but slow (55s), overly pessimistic (F6 source rating).
+- **NVIDIA Nemotron Super 49B** — Fast (5s) but JSON occasionally truncated. Reliable as fallback.
+- **NVIDIA Nemotron Ultra 253B** — Broken JSON schema (reasoning in wrong field). Not usable.
 
-Run the benchmark yourself: `node scripts/benchmark.js`
+### Media Analysis Benchmark (2026-04-01)
+
+Tested on a 4chan screenshot image (140KB JPEG). Vision models evaluated for image description, authenticity detection, and JSON compliance.
+
+| Model | Time | JSON | Schema | Authenticity | Conf | Identification |
+|-------|------|------|--------|-------------|------|----------------|
+| Ollama Qwen3-VL 235B | 19.77s | Y | 0 issues | genuine | 0.95 | Screenshot of 4chan thread |
+| **Ollama Qwen3-VL 235B Instruct** | 13.81s | Y | 0 issues | genuine | 1.00 | Screenshot of 4chan post |
+| Ollama Gemma3 27B | 10.54s | Y | 0 issues | genuine | 0.95 | Screenshot of text-based post |
+| Ollama Gemma3 12B | 9.01s | Y | 0 issues | edited | 1.00 | Screenshot of Reddit post (wrong) |
+
+**Findings:**
+- **Qwen3-VL 235B Instruct** — Most accurate: correctly identified 4chan archive, read URL/metadata, perfect forensic analysis. Selected for media.
+- **Qwen3-VL 235B** — Same quality, slightly slower, more verbose.
+- **Gemma3 27B** — Correct but less detailed forensic notes.
+- **Gemma3 12B** — Misidentified as "Reddit" and classified as "edited" (wrong). Not recommended.
+
+Run benchmarks: `node scripts/benchmark.js` and `node scripts/benchmark-media.js`
 
 ## Quick start
 
@@ -130,7 +152,7 @@ src/
   scrape-posts.js     Reddit JSON API scraper
   scrape-comments.js  Comment fetcher with re-eval flagging
   evaluate.js         LLM evaluator (OpenAI-compatible, with fallback)
-  analyze-media.js    Anthropic Vision API for images
+  analyze-media.js    Vision LLM for image analysis (Ollama Cloud)
   check-removals.js   Post removal tracking + censorship detection
   check-users.js      User humanity profiling + bot detection
   geocode.js          Nominatim geocoder
@@ -177,7 +199,7 @@ public/
 
 ## Tech stack
 
-Node.js, Firestore Enterprise (MongoDB-compatible), Express, Leaflet, NVIDIA NIM / Ollama Cloud (OpenAI-compatible LLMs), Anthropic Vision API, Docker, Telegram Bot API, Nominatim, Cloud Run
+Node.js, Firestore Enterprise (MongoDB-compatible), Express, Leaflet, Ollama Cloud / NVIDIA NIM (OpenAI-compatible LLMs), Qwen3-VL (vision), Docker, Telegram Bot API, Nominatim, Cloud Run
 
 ---
 

@@ -1,6 +1,6 @@
 # NERD — Neural Evaluation of Reddit Data
 
-Reddit scraper agent that collects posts/comments from UFO subreddits, evaluates authenticity with Claude, and displays findings in a terminal-style web UI.
+Reddit scraper agent that collects posts/comments from UFO subreddits, evaluates authenticity with open-source LLMs, and displays findings in a terminal-style web UI.
 
 ## Run Modes
 
@@ -23,8 +23,8 @@ src/
 ├── db.js               MongoDB connection (posts + comments collections)
 ├── scrape-posts.js     Reddit JSON API scraper (paginated, new/hot/top, no auth)
 ├── scrape-comments.js  Comment fetcher with re-fetch + re-eval flagging
-├── evaluate.js         Claude Code CLI non-interactive evaluator
-├── analyze-media.js    Image analysis via Anthropic Vision API (base64)
+├── evaluate.js         LLM evaluator (OpenAI-compatible, with fallback)
+├── analyze-media.js    Vision LLM image analysis (Ollama Cloud Qwen3-VL)
 ├── check-removals.js   Tracks deleted/removed posts, flags censorship
 ├── check-users.js      User humanity profiling (karma, age, comment patterns, bot detection)
 ├── geocode.js          Location extraction + Nominatim geocoding
@@ -43,9 +43,9 @@ public/
 |-----|----------|-------------|
 | Posts | `*/5 * * * *` | Scrape subreddits via Reddit JSON API |
 | Comments | `*/7 * * * *` | Fetch comments, re-fetch old posts, flag for re-eval |
-| Evaluate | `* * * * *` | 1 post/min via `claude -p` (Haiku model) |
+| Evaluate | `* * * * *` | 1 post/min via OpenAI-compatible LLM API |
 | Geocode | `*/2 * * * *` | Extract locations from titles, geocode via Nominatim |
-| Media | `*/3 * * * *` | Download images, analyze via Anthropic Vision API |
+| Media | `*/3 * * * *` | Download images, analyze via Vision LLM (Qwen3-VL) |
 | Removals | `*/10 * * * *` | Check if posts were deleted/removed, flag censorship |
 | Users | `*/2 * * * *` | Profile Reddit users, calculate humanity score (30 users/batch) |
 
@@ -75,10 +75,11 @@ docker compose up -d
 
 ## Key Details
 
-- Text evaluation uses OpenAI-compatible LLM APIs (primary: NVIDIA Nemotron 3 Super, fallback: Ollama Cloud Qwen 3.5)
+- Text evaluation uses OpenAI-compatible LLM APIs (primary: Ollama Cloud Qwen 3.5 397B, fallback: NVIDIA Nemotron Super 49B)
 - Config: `LLM_BASE_URL/KEY/MODEL` (primary) + `LLM_FALLBACK_BASE_URL/KEY/MODEL` (fallback)
 - `evaluatedBy` field on posts tracks which model was used for each evaluation
-- Media/image analysis uses Anthropic API directly (needs ANTHROPIC_API_KEY)
+- Media/image analysis uses OpenAI-compatible Vision API (config: `VISION_BASE_URL/API_KEY/MODEL`)
+- Current vision model: Ollama Cloud Qwen3-VL 235B Instruct
 - v.redd.it videos blocked by Reddit (403), only images analyzed currently
 - Posts get `needsReeval: true` when new comments arrive
 - Telegram sends formatted HTML messages with verdict + reasoning + reddit link
@@ -87,4 +88,4 @@ docker compose up -d
 - User humanity scoring: account age, karma ratio, vocab diversity, comment timing, duplicate detection
 - Evaluation uses intelligence frameworks: Admiralty Code, CBCA, ACH, deception indicators
 - Eval fields: `admiraltyRating`, `cbcaScore`, `competingHypothesis`, `evaluatedBy`
-- Benchmark script: `node scripts/benchmark.js` tests multiple LLM providers
+- Benchmark scripts: `node scripts/benchmark.js` (text eval) and `node scripts/benchmark-media.js` (vision)

@@ -7,14 +7,21 @@ const NVIDIA_BASE = "https://integrate.api.nvidia.com/v1";
 const NVIDIA_KEY = process.env.LLM_API_KEY;
 const OLLAMA_BASE = process.env.LLM_FALLBACK_BASE_URL || "https://ollama.com/v1";
 const OLLAMA_KEY = process.env.LLM_FALLBACK_API_KEY;
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 
 const providers = [
-  { name: "NVIDIA Nemotron 3 Super 120B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/nemotron-3-super-120b-a12b" },
-  { name: "NVIDIA Llama 3.3 Nemotron Super 49B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.3-nemotron-super-49b-v1" },
-  { name: "NVIDIA Llama 3.1 Nemotron Ultra 253B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.1-nemotron-ultra-253b-v1" },
-  { name: "DeepSeek R1 Distill Qwen 32B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "deepseek-ai/deepseek-r1-distill-qwen-32b" },
-  { name: "Llama 3.1 8B Instruct", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "meta/llama-3.1-8b-instruct" },
-  { name: "Ollama Cloud Qwen 3.5", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "qwen3.5" },
+  // Anthropic (reference)
+  { name: "Claude Haiku 3.5", baseUrl: "anthropic", apiKey: ANTHROPIC_KEY, model: "claude-haiku-4-5-20251001" },
+  // Ollama Cloud — powerful models
+  { name: "Ollama DeepSeek V3.2", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "deepseek-v3.2" },
+  { name: "Ollama Qwen 3.5 397B", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "qwen3.5:397b" },
+  { name: "Ollama Mistral Large 3 675B", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "mistral-large-3:675b" },
+  { name: "Ollama Cogito 2.1 671B", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "cogito-2.1:671b" },
+  { name: "Ollama Kimi K2 1T", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "kimi-k2:1t" },
+  { name: "Ollama Qwen 3.5 (small)", baseUrl: OLLAMA_BASE, apiKey: OLLAMA_KEY, model: "qwen3.5" },
+  // NVIDIA
+  { name: "NVIDIA Nemotron Super 49B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.3-nemotron-super-49b-v1" },
+  { name: "NVIDIA Nemotron Ultra 253B", baseUrl: NVIDIA_BASE, apiKey: NVIDIA_KEY, model: "nvidia/llama-3.1-nemotron-ultra-253b-v1" },
 ];
 
 function extractJson(text) {
@@ -36,7 +43,50 @@ function validateEval(parsed) {
   return issues;
 }
 
+async function callAnthropic(provider, prompt) {
+  const start = performance.now();
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": provider.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        max_tokens: 4096,
+        system: SYSTEM_MSG,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.6,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    });
+
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    if (!res.ok) {
+      const body = await res.text();
+      return { error: `HTTP ${res.status}: ${body.slice(0, 300)}`, elapsed };
+    }
+
+    const data = await res.json();
+    const raw = data.content?.[0]?.text || JSON.stringify(data);
+    const usage = { prompt_tokens: data.usage?.input_tokens, completion_tokens: data.usage?.output_tokens };
+    const finishReason = data.stop_reason || "unknown";
+
+    let parsed, parseOk = true;
+    try { parsed = JSON.parse(extractJson(raw)); } catch { parsed = null; parseOk = false; }
+    const validation = parseOk && parsed ? validateEval(parsed) : ["JSON parse failed"];
+    return { parsed, elapsed, usage, finishReason, validation, parseOk, raw };
+  } catch (err) {
+    const elapsed = ((performance.now() - start) / 1000).toFixed(2);
+    return { error: err.message, elapsed };
+  }
+}
+
 async function callProvider(provider, prompt) {
+  if (provider.baseUrl === "anthropic") return callAnthropic(provider, prompt);
+
   const start = performance.now();
   try {
     const res = await fetch(`${provider.baseUrl}/chat/completions`, {
@@ -168,9 +218,13 @@ async function main() {
   console.log(`Author: u/${post.author} | Score: ${post.score}`);
   console.log(`Previous eval: ${post.evaluation?.verdict} (${post.evaluation?.confidence})`);
   console.log(`Comments: ${comments.length}`);
-  console.log("\n" + "=".repeat(80) + "\n");
 
   const prompt = buildPrompt(post, comments);
+
+  console.log("\n" + "=".repeat(80));
+  console.log("\n## FULL PROMPT SENT TO ALL MODELS:\n");
+  console.log(prompt);
+  console.log("\n" + "=".repeat(80) + "\n");
   const results = [];
 
   for (const provider of providers) {
@@ -197,7 +251,11 @@ async function main() {
         console.log(`  Verdict: ${result.parsed.verdict} (${result.parsed.confidence})`);
         console.log(`  Admiralty: ${result.parsed.admiraltyRating} | CBCA: ${result.parsed.cbcaScore}`);
         console.log(`  Hypothesis: ${result.parsed.competingHypothesis}`);
-        console.log(`  Reasoning: ${result.parsed.reasoning?.slice(0, 200)}`);
+        console.log(`  Reasoning: ${result.parsed.reasoning}`);
+      console.log(`  Competing: ${result.parsed.competingHypothesis}`);
+      }
+      if (!result.parseOk || result.validation.length > 0) {
+        console.log(`  RAW OUTPUT:\n${result.raw?.slice(0, 500)}`);
       }
       results.push({
         name: provider.name,
