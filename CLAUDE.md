@@ -43,11 +43,11 @@ public/
 |-----|----------|-------------|
 | Posts | `*/5 * * * *` | Scrape subreddits via Reddit JSON API |
 | Comments | `*/7 * * * *` | Fetch comments, re-fetch old posts, flag for re-eval |
-| Evaluate | `* * * * *` | 1 post/min via OpenAI-compatible LLM API |
-| Geocode | `*/2 * * * *` | Extract locations from titles, geocode via Nominatim |
-| Media | `*/3 * * * *` | Download images, analyze via Vision LLM (Qwen3-VL) |
-| Removals | `*/10 * * * *` | Check if posts were deleted/removed, flag censorship |
-| Users | `*/2 * * * *` | Profile Reddit users, calculate humanity score (30 users/batch) |
+| Evaluate | `CRON_EVALUATE` env | Up to 5 posts/run via OpenAI-compatible LLM API (default `*/10 * * * *`) |
+| Geocode | `*/10 * * * *` | Extract locations from titles, geocode via Nominatim |
+| Media | `*/5 * * * *` | Download images, analyze via Vision LLM (Qwen3-VL) |
+| Removals | `*/15 * * * *` | Check if posts were deleted/removed, flag censorship |
+| Users | `*/15 * * * *` | Profile Reddit users, calculate humanity score (up to 30 users/batch) |
 
 ## API Endpoints
 
@@ -62,9 +62,21 @@ public/
 
 ## MongoDB Collections
 
-- **posts** — indexes: `redditId` (unique), `evaluated`
-- **comments** — indexes: `redditId` (unique), `postRedditId`
-- **users** — indexes: `username` (unique); humanity score 0-100, signals array
+- **posts** — indexes: `redditId` (unique), `evaluated`, `needsReeval`, `(commentsFetched, lastCommentFetch)`, `lastChecked`, `removedStatus`, `mediaAnalysis`, `geo.lat`, `createdUtc`, `insertedAt`
+- **comments** — indexes: `redditId` (unique), `postRedditId`, `author`, `createdUtc`
+- **users** — indexes: `username` (unique), `lastChecked`; humanity score 0-100, signals array
+
+## Server-side caching
+
+`src/server.js` keeps an in-memory TTL cache for hot endpoints (frontend polling hits these):
+- `/api/stats` and `/api/stats/removals` — 60s TTL (each runs 6+ countDocuments/aggregate)
+- `/api/posts`, `/api/geo`, `/api/removals` — 30-60s TTL
+
+Cache is process-local; with multiple Cloud Run instances each holds its own copy. That's fine — the goal is to absorb the polling burst from the frontend, not be globally consistent.
+
+## Frontend polling
+
+`public/index.html` has an auto-refresh toggle. Default is **OFF**; intervals are 1m / 5m / 15m. Don't re-enable by default without first reviewing Firestore read costs — the previous default (30s with 5 endpoints) was the main driver of the 50€/mo bill that prompted the perf pass.
 
 ## Running
 
