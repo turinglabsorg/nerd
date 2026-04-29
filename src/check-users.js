@@ -171,16 +171,20 @@ function calculateHumanityScore(user, userComments) {
 }
 
 export async function checkUsers() {
-  // Get users from recent comments that haven't been checked (or checked > 1h ago)
+  // Pull recent comments and dedupe authors in memory — avoids a $group full-scan.
+  // Requires index on createdUtc.
   const cutoff = new Date(Date.now() - 60 * 60 * 1000);
-  const recentAuthors = await comments().aggregate([
-    { $group: { _id: "$author" } },
-    { $limit: 50 },
-  ]).toArray();
+  const recentComments = await comments()
+    .find({}, { projection: { author: 1 } })
+    .sort({ createdUtc: -1 })
+    .limit(200)
+    .toArray();
 
-  const authorNames = recentAuthors
-    .map(a => a._id)
-    .filter(a => a && a !== "[deleted]" && a !== "AutoModerator");
+  const authorNames = [...new Set(
+    recentComments
+      .map(c => c.author)
+      .filter(a => a && a !== "[deleted]" && a !== "AutoModerator")
+  )].slice(0, 50);
 
   if (authorNames.length === 0) {
     console.log("[users] no users to check");
@@ -263,6 +267,7 @@ export async function getPostHumanityStats(postRedditId) {
   const postComments = await comments()
     .find({ postRedditId })
     .project({ author: 1 })
+    .limit(200)
     .toArray();
 
   const authorNames = [...new Set(

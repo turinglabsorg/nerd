@@ -51,17 +51,23 @@ async function runLLM(prompt) {
 }
 
 export async function evaluatePosts() {
-  // Grab all unevaluated posts + posts that got new comments since last evaluation
-  const pending = await posts()
-    .find({
-      $or: [
-        { evaluated: false },
-        { evaluated: true, needsReeval: true },
-      ],
-    })
+  // Two indexed queries instead of $or + unindexed sort.
+  const BATCH = 5;
+  const fresh = await posts()
+    .find({ evaluated: false })
     .sort({ insertedAt: -1 })
-    .limit(1)
+    .limit(BATCH)
     .toArray();
+
+  const pending = [...fresh];
+  if (pending.length < BATCH) {
+    const reeval = await posts()
+      .find({ needsReeval: true })
+      .sort({ insertedAt: -1 })
+      .limit(BATCH - pending.length)
+      .toArray();
+    pending.push(...reeval);
+  }
 
   if (pending.length === 0) {
     console.log("[evaluate] no pending posts");

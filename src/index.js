@@ -63,24 +63,24 @@ async function main() {
     await evaluatePosts();
   });
 
-  // Cron: geocode posts (every 2 minutes)
-  cron.schedule("*/2 * * * *", async () => {
+  // Cron: geocode posts (every 10 minutes)
+  cron.schedule("*/10 * * * *", async () => {
     await geocodePosts();
   });
 
-  // Cron: check for removed/deleted posts (every 10 minutes)
-  cron.schedule("*/10 * * * *", async () => {
+  // Cron: check for removed/deleted posts (every 15 minutes)
+  cron.schedule("*/15 * * * *", async () => {
     console.log("\n[cron] checking removals...");
     await checkRemovals();
   });
 
-  // Cron: check user humanity (every 2 minutes)
-  cron.schedule("*/2 * * * *", async () => {
+  // Cron: check user humanity (every 15 minutes)
+  cron.schedule("*/15 * * * *", async () => {
     await checkUsers();
   });
 
-  // Cron: analyze media (every 3 minutes)
-  cron.schedule("*/3 * * * *", async () => {
+  // Cron: analyze media (every 5 minutes)
+  cron.schedule("*/5 * * * *", async () => {
     console.log("\n[cron] analyzing media...");
     await analyzeMedia();
   });

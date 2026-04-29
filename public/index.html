@@ -817,14 +817,13 @@
           <option value="score">SCORE</option>
           <option value="confidence">CONFIDENCE</option>
         </select>
-        <button class="filter-btn active" id="btn-auto" onclick="toggleAuto()">AUTO</button>
+        <button class="filter-btn" id="btn-auto" onclick="toggleAuto()">PAUSED</button>
         <select id="auto-interval" onchange="setAutoInterval()" style="
           background:var(--bg);color:var(--text-dim);border:1px solid var(--border);
           font-family:inherit;font-size:10px;padding:2px 4px;cursor:pointer;">
-          <option value="10000">10s</option>
-          <option value="30000" selected>30s</option>
           <option value="60000">1m</option>
-          <option value="300000">5m</option>
+          <option value="300000" selected>5m</option>
+          <option value="900000">15m</option>
         </select>
       </div>
       <div class="panel-body" id="findings-list"></div>
@@ -869,8 +868,8 @@ let activeHighlight = null;
 let allPosts = [];
 let geoData = [];
 let currentFilter = "all";
-let autoRefresh = true;
-let autoInterval = 30000;
+let autoRefresh = false;
+let autoInterval = 300000;
 let autoTimer = null;
 
 // Boot sequence
@@ -916,8 +915,8 @@ async function init() {
     showDetail(pathMatch[1]);
   }
 
-  // Start auto-refresh
-  startAutoRefresh();
+  // Start auto-refresh only if enabled (default OFF)
+  if (autoRefresh) startAutoRefresh();
 }
 
 function renderMap() {

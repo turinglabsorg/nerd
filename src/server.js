@@ -6,105 +6,127 @@ import { getPostHumanityStats } from "./check-users.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const STATS_TTL_MS = 60_000;
+const cache = new Map();
+
+async function cached(key, ttl, loader) {
+  const hit = cache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.value;
+  const value = await loader();
+  cache.set(key, { value, expires: Date.now() + ttl });
+  return value;
+}
+
 export function startServer(port = 3666) {
   const app = express();
 
   app.use(express.static(path.join(__dirname, "../public")));
 
-  // API: all evaluated posts
+  // API: all evaluated posts (cached — primary list endpoint, polled from UI)
   app.get("/api/posts", async (req, res) => {
-    const filter = {};
-    if (req.query.verdict) filter["evaluation.verdict"] = req.query.verdict;
-    if (req.query.evaluated === "true") filter.evaluated = true;
+    const limit = parseInt(req.query.limit || "200", 10);
+    const key = `posts:${req.query.verdict || ""}:${req.query.evaluated || ""}:${limit}`;
+    const docs = await cached(key, 30_000, async () => {
+      const filter = {};
+      if (req.query.verdict) filter["evaluation.verdict"] = req.query.verdict;
+      if (req.query.evaluated === "true") filter.evaluated = true;
 
-    const docs = await posts()
-      .find(filter)
-      .sort({ createdUtc: -1 })
-      .limit(parseInt(req.query.limit || "200", 10))
-      .toArray();
-
+      return posts()
+        .find(filter)
+        .sort({ createdUtc: -1 })
+        .limit(limit)
+        .toArray();
+    });
     res.json(docs);
   });
 
-  // API: stats
+  // API: stats (cached — these queries scan the whole collection)
   app.get("/api/stats", async (req, res) => {
-    const usersCol = users();
-    const [totalPosts, totalEvaluated, totalComments, verdicts, subreddits, totalUsers, totalBots] = await Promise.all([
-      posts().countDocuments(),
-      posts().countDocuments({ evaluated: true }),
-      comments().countDocuments(),
-      posts().aggregate([
-        { $match: { evaluated: true } },
-        { $group: { _id: "$evaluation.verdict", count: { $sum: 1 } } },
-      ]).toArray(),
-      posts().aggregate([
-        { $group: { _id: "$subreddit", count: { $sum: 1 } } },
-      ]).toArray(),
-      usersCol.countDocuments().catch(() => 0),
-      usersCol.countDocuments({ humanityScore: { $lt: 40 } }).catch(() => 0),
-    ]);
+    const data = await cached("stats", STATS_TTL_MS, async () => {
+      const usersCol = users();
+      const [totalPosts, totalEvaluated, totalComments, verdicts, subreddits, totalUsers, totalBots] = await Promise.all([
+        posts().countDocuments(),
+        posts().countDocuments({ evaluated: true }),
+        comments().countDocuments(),
+        posts().aggregate([
+          { $match: { evaluated: true } },
+          { $group: { _id: "$evaluation.verdict", count: { $sum: 1 } } },
+        ]).toArray(),
+        posts().aggregate([
+          { $group: { _id: "$subreddit", count: { $sum: 1 } } },
+        ]).toArray(),
+        usersCol.countDocuments().catch(() => 0),
+        usersCol.countDocuments({ humanityScore: { $lt: 40 } }).catch(() => 0),
+      ]);
 
-    res.json({
-      totalPosts,
-      totalEvaluated,
-      pendingEval: totalPosts - totalEvaluated,
-      totalComments,
-      totalUsers,
-      totalBots,
-      verdicts: Object.fromEntries(verdicts.map((v) => [v._id, v.count])),
-      subreddits: Object.fromEntries(subreddits.map((s) => [s._id, s.count])),
+      return {
+        totalPosts,
+        totalEvaluated,
+        pendingEval: totalPosts - totalEvaluated,
+        totalComments,
+        totalUsers,
+        totalBots,
+        verdicts: Object.fromEntries(verdicts.map((v) => [v._id, v.count])),
+        subreddits: Object.fromEntries(subreddits.map((s) => [s._id, s.count])),
+      };
     });
+    res.json(data);
   });
 
-  // API: geolocated posts (only those with coordinates)
+  // API: geolocated posts (cached — every map render polls this)
   app.get("/api/geo", async (req, res) => {
-    const docs = await posts()
-      .find({ "geo.lat": { $exists: true } })
-      .project({
-        redditId: 1, title: 1, subreddit: 1, permalink: 1, score: 1,
-        evaluation: 1, geo: 1, evaluatedAt: 1,
-      })
-      .toArray();
-
+    const docs = await cached("geo", 60_000, () =>
+      posts()
+        .find({ "geo.lat": { $exists: true } })
+        .project({
+          redditId: 1, title: 1, subreddit: 1, permalink: 1, score: 1,
+          evaluation: 1, geo: 1, evaluatedAt: 1,
+        })
+        .toArray()
+    );
     res.json(docs);
   });
 
-  // API: removed/censored posts
+  // API: removed/censored posts (cached)
   app.get("/api/removals", async (req, res) => {
-    const docs = await posts()
-      .find({
-        removedStatus: { $exists: true, $nin: ["active", null] },
-      })
-      .sort({ removedAt: -1 })
-      .limit(200)
-      .toArray();
-
+    const docs = await cached("removals", 60_000, () =>
+      posts()
+        .find({
+          removedStatus: { $exists: true, $nin: ["active", null] },
+        })
+        .sort({ removedAt: -1 })
+        .limit(200)
+        .toArray()
+    );
     res.json(docs);
   });
 
-  // API: censorship stats
+  // API: censorship stats (cached)
   app.get("/api/stats/removals", async (req, res) => {
-    const [total, byStatus, censorshipCandidates] = await Promise.all([
-      posts().countDocuments({
-        removedStatus: { $exists: true, $nin: ["active", null] },
-      }),
-      posts().aggregate([
-        { $match: { removedStatus: { $exists: true, $nin: ["active", null] } } },
-        { $group: { _id: "$removedStatus", count: { $sum: 1 } } },
-      ]).toArray(),
-      // Posts rated "real" that were removed by moderators
-      posts().countDocuments({
-        removedStatus: { $regex: /^removed/ },
-        "evaluation.verdict": "real",
-        "evaluation.confidence": { $gte: 0.6 },
-      }),
-    ]);
+    const data = await cached("stats:removals", STATS_TTL_MS, async () => {
+      const [total, byStatus, censorshipCandidates] = await Promise.all([
+        posts().countDocuments({
+          removedStatus: { $exists: true, $nin: ["active", null] },
+        }),
+        posts().aggregate([
+          { $match: { removedStatus: { $exists: true, $nin: ["active", null] } } },
+          { $group: { _id: "$removedStatus", count: { $sum: 1 } } },
+        ]).toArray(),
+        // Posts rated "real" that were removed by moderators
+        posts().countDocuments({
+          removedStatus: { $regex: /^removed/ },
+          "evaluation.verdict": "real",
+          "evaluation.confidence": { $gte: 0.6 },
+        }),
+      ]);
 
-    res.json({
-      totalRemoved: total,
-      byStatus: Object.fromEntries(byStatus.map((s) => [s._id, s.count])),
-      censorshipCandidates,
+      return {
+        totalRemoved: total,
+        byStatus: Object.fromEntries(byStatus.map((s) => [s._id, s.count])),
+        censorshipCandidates,
+      };
     });
+    res.json(data);
   });
 
   // API: search users

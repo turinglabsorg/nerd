@@ -20,9 +20,20 @@ export async function connect() {
   const indexes = [
     ["posts", { redditId: 1 }, { unique: true }],
     ["posts", { evaluated: 1 }],
+    ["posts", { needsReeval: 1 }],
+    ["posts", { commentsFetched: 1, lastCommentFetch: 1 }],
+    ["posts", { lastChecked: 1 }],
+    ["posts", { removedStatus: 1 }],
+    ["posts", { mediaAnalysis: 1 }],
+    ["posts", { "geo.lat": 1 }],
+    ["posts", { createdUtc: -1 }],
+    ["posts", { insertedAt: -1 }],
     ["comments", { redditId: 1 }, { unique: true }],
     ["comments", { postRedditId: 1 }],
+    ["comments", { author: 1 }],
+    ["comments", { createdUtc: -1 }],
     ["users", { username: 1 }, { unique: true }],
+    ["users", { lastChecked: 1 }],
   ];
 
   for (const [col, keys, opts] of indexes) {
